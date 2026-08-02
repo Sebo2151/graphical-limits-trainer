@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Graphical Limits Trainer — Browser Tests</title>
+  <style>
+    body { max-width: 900px; margin: 40px auto; padding: 0 20px; font-family: system-ui, sans-serif; }
+    .pass { color: #14734a; } .fail { color: #a13c32; }
+    li { margin: 8px 0; } pre { white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <h1>Browser smoke tests</h1>
+  <p>These checks exercise deterministic generation and browser APIs used by the app.</p>
+  <ol id="results"></ol>
+  <script type="module">
+    import { generateProblem, parseLimitAnswer, answersEqual, POS_INF } from './core.mjs';
+    const results = document.querySelector('#results');
+    function check(name, fn) {
+      const li = document.createElement('li');
+      try { fn(); li.className = 'pass'; li.textContent = `✓ ${name}`; }
+      catch (error) { li.className = 'fail'; li.innerHTML = `✗ ${name}<pre>${error.stack}</pre>`; }
+      results.append(li);
+    }
+    check('MathML is supported or degrades to readable text', () => {
+      const math = document.createElementNS('http://www.w3.org/1998/Math/MathML', 'math');
+      if (!(math instanceof Element)) throw new Error('Could not create a MathML element.');
+    });
+    check('Special infinity input parses', () => {
+      if (!answersEqual(parseLimitAnswer('+∞'), POS_INF)) throw new Error('Infinity did not parse.');
+    });
+    check('The same seed reproduces the same problem', () => {
+      const a = generateProblem('browser-seed');
+      const b = generateProblem('browser-seed');
+      if (a.question.type !== b.question.type || a.scene.feature !== b.scene.feature) throw new Error('Seed was not deterministic.');
+    });
+    check('A broad sample generates without exceptions', () => {
+      for (let i = 0; i < 500; i += 1) generateProblem(`browser-${i}`);
+    });
+    check('Local storage is available', () => {
+      localStorage.setItem('graphicalLimitsTrainer.test', 'ok');
+      if (localStorage.getItem('graphicalLimitsTrainer.test') !== 'ok') throw new Error('Could not read local storage.');
+      localStorage.removeItem('graphicalLimitsTrainer.test');
+    });
+  </script>
+</body>
+</html>

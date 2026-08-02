@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f7f8fb">
+  <title>Graphical Limits Trainer</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="app-header">
+    <div>
+      <p class="eyebrow">Calculus I practice</p>
+      <h1>Graphical Limits Trainer</h1>
+    </div>
+    <nav class="header-actions" aria-label="App controls">
+      <button id="progressButton" class="secondary-button" type="button">Progress</button>
+      <button id="optionsButton" class="secondary-button" type="button">Options</button>
+      <button id="newProblemButton" class="primary-button" type="button">New problem</button>
+    </nav>
+  </header>
+
+  <main class="app-shell">
+    <section class="graph-card" aria-labelledby="graphHeading">
+      <div class="card-heading-row">
+        <div>
+          <h2 id="graphHeading">Graph of <span class="math-inline"><i>f</i></span></h2>
+          <p id="graphInstruction">Read values and limiting behavior directly from the graph.</p>
+        </div>
+        <div class="seed-control" aria-label="Problem seed">
+          <span id="seedLabel">Seed</span>
+          <button id="copySeedButton" class="text-button" type="button" title="Copy a link to this problem"></button>
+        </div>
+      </div>
+
+      <div id="graphFrame" class="graph-frame">
+        <svg id="graphSvg" viewBox="0 0 900 520" role="img" aria-labelledby="graphTitle graphDescription">
+          <title id="graphTitle">Graph of a piecewise function</title>
+          <desc id="graphDescription">A coordinate graph used for a graphical limit question.</desc>
+        </svg>
+      </div>
+
+      <div id="animationControls" class="animation-controls" hidden>
+        <button id="showMeButton" class="primary-button" type="button">Show me</button>
+        <button id="animationToggleButton" class="secondary-button" type="button" hidden>Pause animation</button>
+        <button id="replayAnimationButton" class="secondary-button" type="button" hidden>Replay</button>
+      </div>
+    </section>
+
+    <section class="question-card" aria-labelledby="questionHeading">
+      <p class="question-label">Question</p>
+      <h2 id="questionHeading" class="question-math"></h2>
+      <p id="questionPrompt" class="question-prompt" hidden></p>
+
+      <form id="answerForm" novalidate>
+        <div id="limitAnswerArea">
+          <label for="answerInput">Your answer</label>
+          <div class="answer-row">
+            <input id="answerInput" name="answer" type="text" inputmode="decimal" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="answerHelp feedbackMessage">
+            <button class="primary-button submit-button" type="submit">Submit</button>
+          </div>
+          <p id="answerHelp" class="help-text">Enter an integer, decimal, fraction, DNE, +∞, or −∞.</p>
+
+          <div class="special-answer-buttons" aria-label="Special answers">
+            <button type="button" data-answer="DNE">DNE</button>
+            <button type="button" data-answer="+∞">+∞</button>
+            <button type="button" data-answer="−∞">−∞</button>
+          </div>
+
+          <div id="mobileKeypad" class="mobile-keypad" aria-label="Simplified answer keyboard">
+            <button type="button" data-key="7">7</button>
+            <button type="button" data-key="8">8</button>
+            <button type="button" data-key="9">9</button>
+            <button type="button" data-key="backspace" aria-label="Backspace">⌫</button>
+            <button type="button" data-key="4">4</button>
+            <button type="button" data-key="5">5</button>
+            <button type="button" data-key="6">6</button>
+            <button type="button" data-key="/">/</button>
+            <button type="button" data-key="1">1</button>
+            <button type="button" data-key="2">2</button>
+            <button type="button" data-key="3">3</button>
+            <button type="button" data-key="-">−</button>
+            <button type="button" data-key="0">0</button>
+            <button type="button" data-key=".">.</button>
+            <button type="button" data-key="clear">Clear</button>
+            <button type="submit" class="keypad-submit">Submit</button>
+          </div>
+        </div>
+
+        <div id="choiceAnswerArea" class="choice-answer-area" hidden></div>
+      </form>
+
+      <div id="feedbackPanel" class="feedback-panel" aria-live="polite" hidden>
+        <div class="feedback-icon" aria-hidden="true"></div>
+        <div>
+          <h3 id="feedbackHeading"></h3>
+          <p id="feedbackMessage"></p>
+          <div class="feedback-actions">
+            <button id="nextProblemButton" class="primary-button" type="button" hidden>Next problem</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <details id="debugPanel" class="debug-panel" hidden>
+      <summary>Problem diagnostics</summary>
+      <pre id="debugOutput"></pre>
+    </details>
+  </main>
+
+  <dialog id="optionsDialog" class="app-dialog">
+    <form id="optionsForm" method="dialog">
+      <div class="dialog-heading-row">
+        <div>
+          <p class="eyebrow">Practice settings</p>
+          <h2>Options</h2>
+        </div>
+        <button class="icon-button" value="cancel" aria-label="Close options" type="submit">×</button>
+      </div>
+
+      <fieldset>
+        <legend>Difficulty</legend>
+        <div class="range-row">
+          <span>Introductory</span>
+          <input id="difficultyInput" name="difficulty" type="range" min="1" max="3" step="1">
+          <span>Challenge</span>
+        </div>
+        <p id="difficultyDescription" class="help-text"></p>
+      </fieldset>
+
+      <fieldset>
+        <legend>Problem seed</legend>
+        <label for="seedInput">Seed</label>
+        <input id="seedInput" name="seed" class="dialog-text-input" type="text" autocomplete="off" spellcheck="false">
+        <p class="help-text">Edit this to reproduce or share a particular problem. Leave it blank for a new random seed.</p>
+      </fieldset>
+
+      <fieldset>
+        <legend>Question types</legend>
+        <div class="checkbox-grid">
+          <label><input type="checkbox" name="questionType" value="functionValue"> Function values</label>
+          <label><input type="checkbox" name="questionType" value="oneSided"> One-sided limits</label>
+          <label><input type="checkbox" name="questionType" value="twoSided"> Two-sided limits</label>
+          <label><input type="checkbox" name="questionType" value="continuity"> Continuity</label>
+          <label><input type="checkbox" name="questionType" value="classification"> Discontinuity type</label>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Graph behavior</legend>
+        <div class="checkbox-grid">
+          <label><input type="checkbox" name="feature" value="continuous"> Ordinary continuous points</label>
+          <label><input type="checkbox" name="feature" value="removable"> Removable discontinuities</label>
+          <label><input type="checkbox" name="feature" value="jump"> Jump discontinuities</label>
+          <label><input type="checkbox" name="feature" value="infinite"> Infinite discontinuities</label>
+          <label><input type="checkbox" name="feature" value="oscillatory"> Oscillatory discontinuities</label>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Experience</legend>
+        <div class="checkbox-grid">
+          <label><input id="hapticsInput" type="checkbox"> Mobile vibration feedback</label>
+          <label><input id="reducedMotionInput" type="checkbox"> Reduce animation</label>
+        </div>
+      </fieldset>
+
+      <div id="optionsError" class="form-error" role="alert"></div>
+      <div class="dialog-actions">
+        <button id="resetOptionsButton" class="secondary-button" type="button">Reset defaults</button>
+        <button id="saveOptionsButton" class="primary-button" type="button">Save and start</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="progressDialog" class="app-dialog progress-dialog">
+    <div class="dialog-heading-row">
+      <div>
+        <p class="eyebrow">Stored on this device</p>
+        <h2>Your progress</h2>
+      </div>
+      <button id="closeProgressButton" class="icon-button" aria-label="Close progress" type="button">×</button>
+    </div>
+    <div id="progressSummary" class="progress-summary"></div>
+    <div id="progressSkills" class="progress-skills"></div>
+    <div class="dialog-actions">
+      <button id="exportProgressButton" class="secondary-button" type="button">Export data</button>
+      <button id="resetProgressButton" class="danger-button" type="button">Reset progress</button>
+    </div>
+  </dialog>
+
+  <script type="module" src="app.mjs"></script>
+</body>
+</html>
