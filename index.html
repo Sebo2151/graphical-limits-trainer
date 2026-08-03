@@ -21,37 +21,37 @@
   </header>
 
   <main class="app-shell">
+    <section class="question-strip" aria-labelledby="questionHeading">
+      <p class="question-label">Question</p>
+      <h2 id="questionHeading" class="question-math"></h2>
+      <p id="questionPrompt" class="question-prompt" hidden></p>
+    </section>
+
     <section class="graph-card" aria-labelledby="graphHeading">
       <div class="card-heading-row">
         <div>
           <h2 id="graphHeading">Graph of <span class="math-inline"><i>f</i></span></h2>
           <p id="graphInstruction">Read values and limiting behavior directly from the graph.</p>
         </div>
-        <div class="seed-control" aria-label="Problem seed">
-          <span id="seedLabel">Seed</span>
-          <button id="copySeedButton" class="text-button" type="button" title="Copy a link to this problem"></button>
+      </div>
+
+      <div id="graphPanels" class="graph-panels">
+        <div id="graphFrame" class="graph-frame">
+          <svg id="graphSvg" viewBox="0 0 900 520" role="img" aria-labelledby="graphTitle graphDescription">
+            <title id="graphTitle">Graph of a piecewise function</title>
+            <desc id="graphDescription">A coordinate graph used for a graphical limit question.</desc>
+          </svg>
         </div>
       </div>
 
-      <div id="graphFrame" class="graph-frame">
-        <svg id="graphSvg" viewBox="0 0 900 520" role="img" aria-labelledby="graphTitle graphDescription">
-          <title id="graphTitle">Graph of a piecewise function</title>
-          <desc id="graphDescription">A coordinate graph used for a graphical limit question.</desc>
-        </svg>
-      </div>
-
-      <div id="animationControls" class="animation-controls" hidden>
+      <div id="animationControls" class="animation-controls">
         <button id="showMeButton" class="primary-button" type="button">Show me</button>
         <button id="animationToggleButton" class="secondary-button" type="button" hidden>Pause animation</button>
         <button id="replayAnimationButton" class="secondary-button" type="button" hidden>Replay</button>
       </div>
     </section>
 
-    <section class="question-card" aria-labelledby="questionHeading">
-      <p class="question-label">Question</p>
-      <h2 id="questionHeading" class="question-math"></h2>
-      <p id="questionPrompt" class="question-prompt" hidden></p>
-
+    <section class="answer-card" aria-label="Answer">
       <form id="answerForm" novalidate>
         <div id="limitAnswerArea">
           <label for="answerInput">Your answer</label>
@@ -119,6 +119,24 @@
       </div>
 
       <fieldset>
+        <legend>Practice preset</legend>
+        <label for="presetInput">Preset</label>
+        <select id="presetInput" name="preset" class="dialog-text-input">
+          <option value="functionValues">Reading Function Values</option>
+          <option value="oneSided">One-Sided Limits</option>
+          <option value="twoSided">Two-Sided Limits</option>
+          <option value="infinite">Infinite Limits</option>
+          <option value="atInfinity">Limits at Infinity</option>
+          <option value="continuity">Continuity</option>
+          <option value="limitLaws">Limit Laws</option>
+          <option value="composition">Composition</option>
+          <option value="examReview">Exam 1 Review</option>
+          <option value="weakAreas">Practice My Weak Areas</option>
+          <option value="custom">Custom</option>
+        </select>
+      </fieldset>
+
+      <fieldset>
         <legend>Difficulty</legend>
         <div class="range-row">
           <span>Introductory</span>
@@ -131,8 +149,21 @@
       <fieldset>
         <legend>Problem seed</legend>
         <label for="seedInput">Seed</label>
-        <input id="seedInput" name="seed" class="dialog-text-input" type="text" autocomplete="off" spellcheck="false">
-        <p class="help-text">Type a seed to reproduce a particular problem; the current one is shown as a placeholder. Leave it blank to start a new random problem.</p>
+        <div class="seed-option-row">
+          <input id="seedInput" name="seed" class="dialog-text-input" type="text" autocomplete="off" spellcheck="false">
+          <button id="copySeedButton" class="secondary-button" type="button">Copy current seed</button>
+        </div>
+        <p class="help-text">Type a seed to reproduce a particular problem. Leave it blank to start a new random problem.</p>
+      </fieldset>
+
+      <fieldset>
+        <legend>Major families</legend>
+        <div class="checkbox-grid">
+          <label><input type="checkbox" name="family" value="point"> Limits at finite x-values</label>
+          <label><input type="checkbox" name="family" value="atInfinity"> Limits at infinity</label>
+          <label><input type="checkbox" name="family" value="limitLaws"> Limit laws with f and g</label>
+          <label><input type="checkbox" name="family" value="composition"> Composition f(g(x))</label>
+        </div>
       </fieldset>
 
       <fieldset>
@@ -183,7 +214,9 @@
     </div>
     <div id="progressSummary" class="progress-summary"></div>
     <div id="progressSkills" class="progress-skills"></div>
+    <div id="progressMisconceptions" class="progress-misconceptions"></div>
     <div class="dialog-actions">
+      <button id="practiceWeakButton" class="primary-button" type="button">Practice weak areas</button>
       <button id="exportProgressButton" class="secondary-button" type="button">Export data</button>
       <button id="resetProgressButton" class="danger-button" type="button">Reset progress</button>
     </div>
