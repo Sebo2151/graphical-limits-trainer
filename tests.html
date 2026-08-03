@@ -15,7 +15,7 @@
   <p>These checks exercise deterministic generation and browser APIs used by the app.</p>
   <ol id="results"></ol>
   <script type="module">
-    import { generateProblem, parseLimitAnswer, answersEqual, POS_INF } from './core.mjs';
+    import { generateProblem, parseLimitAnswer, answersEqual, POS_INF, NEG_INF } from './advanced.mjs';
     const results = document.querySelector('#results');
     function check(name, fn) {
       const li = document.createElement('li');
@@ -37,6 +37,19 @@
     });
     check('A broad sample generates without exceptions', () => {
       for (let i = 0; i < 500; i += 1) generateProblem(`browser-${i}`);
+    });
+    check('Every major family generates in the browser', () => {
+      for (const family of ['point', 'atInfinity', 'limitLaws', 'composition']) {
+        const families = { point: false, atInfinity: false, limitLaws: false, composition: false };
+        families[family] = true;
+        const problem = generateProblem(`browser-${family}`, { difficulty: 3, families });
+        if (problem.family !== family) throw new Error(`Expected ${family}, received ${problem.family}.`);
+        if (!problem.panels.length) throw new Error(`${family} did not provide a graph panel.`);
+      }
+    });
+    check('The advanced module reuses the point answer parser', () => {
+      if (!answersEqual(parseLimitAnswer('−∞'), NEG_INF)) throw new Error('A Unicode minus sign was not accepted.');
+      if (parseLimitAnswer('−3').value.toString() !== '-3') throw new Error('A Unicode minus sign was not accepted on a number.');
     });
     check('Local storage is available', () => {
       localStorage.setItem('graphicalLimitsTrainer.test', 'ok');

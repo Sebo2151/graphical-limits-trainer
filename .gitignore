@@ -2,8 +2,9 @@
 .DS_Store
 Thumbs.db
 
-# Editors
+# Editors and agent tooling
 .idea/
+.claude/
 
 # Dependencies and generated files
 node_modules/

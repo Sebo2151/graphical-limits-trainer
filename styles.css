@@ -24,6 +24,7 @@
 
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
+html, body { max-width: 100%; overflow-x: hidden; }
 
 body {
   margin: 0;
@@ -41,6 +42,7 @@ button:focus-visible, input:focus-visible, summary:focus-visible {
 }
 
 .app-header {
+  width: 100%;
   max-width: 1180px;
   margin: 0 auto;
   padding: 24px 24px 16px;
@@ -51,7 +53,7 @@ button:focus-visible, input:focus-visible, summary:focus-visible {
 }
 
 h1, h2, h3, p { margin-top: 0; }
-h1 { margin-bottom: 0; font-size: clamp(1.55rem, 3vw, 2.25rem); letter-spacing: -0.025em; }
+h1 { margin-bottom: 0; font-size: clamp(1.55rem, 3vw, 2.25rem); letter-spacing: 0; }
 h2 { margin-bottom: 8px; }
 
 .eyebrow, .question-label {
@@ -59,7 +61,7 @@ h2 { margin-bottom: 8px; }
   color: var(--accent-dark);
   font-size: 0.75rem;
   font-weight: 800;
-  letter-spacing: 0.1em;
+  letter-spacing: 0;
   text-transform: uppercase;
 }
 
@@ -73,7 +75,7 @@ h2 { margin-bottom: 8px; }
 
 button {
   border: 1px solid transparent;
-  border-radius: 10px;
+  border-radius: 8px;
   padding: 10px 15px;
   cursor: pointer;
   font-weight: 700;
@@ -106,38 +108,38 @@ button {
 .icon-button { padding: 3px 10px; font-size: 1.8rem; line-height: 1; background: transparent; color: var(--muted); }
 
 .app-shell {
+  width: 100%;
   max-width: 1180px;
   margin: 0 auto;
   padding: 0 24px 40px;
   display: grid;
   grid-template-columns: minmax(0, 1.45fr) minmax(330px, 0.75fr);
+  grid-template-areas:
+    "graph question"
+    "graph answer"
+    "debug debug";
   gap: 20px;
   align-items: start;
 }
+.app-shell > * { min-width: 0; }
 
-.graph-card, .question-card, .debug-panel {
+.graph-card, .question-strip, .answer-card, .debug-panel {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 18px;
+  border-radius: 8px;
   box-shadow: var(--shadow);
 }
 
-.graph-card { padding: 22px; }
-.question-card { padding: 26px; position: sticky; top: 16px; }
+.graph-card { grid-area: graph; padding: 22px; overflow: hidden; }
+.question-strip { grid-area: question; padding: 22px 26px 12px; }
+.answer-card { grid-area: answer; padding: 12px 26px 24px; align-self: start; }
 .card-heading-row, .dialog-heading-row { justify-content: space-between; align-items: flex-start; }
 .card-heading-row p { margin-bottom: 0; color: var(--muted); }
 
-.seed-control {
-  display: flex;
-  align-items: center;
-  white-space: nowrap;
-  font-size: 0.78rem;
-  color: var(--muted);
-  background: var(--surface-muted);
-  border-radius: 999px;
-  padding-left: 10px;
-}
-
+.graph-panels { display: grid; gap: 12px; }
+.graph-panels.multi-panel { grid-template-columns: 1fr; gap: 18px; }
+.graph-panel { min-width: 0; }
+.graph-panel-heading { margin: 8px 0 5px; font-size: 0.85rem; font-weight: 800; color: var(--muted); }
 .graph-frame {
   position: relative;
   margin-top: 14px;
@@ -145,7 +147,7 @@ button {
   overflow: hidden;
   background: #fcfdff;
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: 8px;
   aspect-ratio: 900 / 520;
 }
 
@@ -156,13 +158,18 @@ button {
   min-height: 58px;
   display: flex;
   align-items: center;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
   font-family: "STIX Two Math", "Cambria Math", serif;
   font-size: clamp(1.35rem, 3vw, 2rem);
   overflow-x: auto;
+  white-space: nowrap;
 }
 .question-math math { font-size: 1.15em; }
-.question-prompt { color: var(--muted); margin-bottom: 22px; }
+.question-math.question-composition,
+.question-math.question-limitLaw { font-size: 1.45rem; overflow: visible; }
+.question-math.question-composition math,
+.question-math.question-limitLaw math { font-size: 1em; max-width: 100%; }
+.question-prompt { color: var(--muted); margin-bottom: 0; line-height: 1.4; }
 .question-prompt::before { content: "Hint: "; font-weight: 800; color: var(--accent-dark); }
 
 label { font-weight: 700; }
@@ -172,7 +179,7 @@ label { font-weight: 700; }
   width: 100%;
   min-height: 48px;
   border: 2px solid var(--border);
-  border-radius: 10px;
+  border-radius: 8px;
   padding: 9px 12px;
   font-size: 1.2rem;
 }
@@ -198,7 +205,7 @@ label { font-weight: 700; }
 
 .feedback-panel {
   margin-top: 20px;
-  border-radius: 13px;
+  border-radius: 8px;
   padding: 16px;
   display: grid;
   grid-template-columns: auto 1fr;
@@ -224,12 +231,12 @@ label { font-weight: 700; }
   max-height: calc(100vh - 28px);
   overflow: auto;
   border: 1px solid var(--border);
-  border-radius: 18px;
+  border-radius: 8px;
   padding: 24px;
   box-shadow: 0 24px 80px rgba(21, 31, 48, 0.24);
 }
 .app-dialog::backdrop { background: rgba(20, 29, 43, 0.45); backdrop-filter: blur(2px); }
-.app-dialog fieldset { margin: 18px 0; border: 1px solid var(--border); border-radius: 13px; padding: 16px; }
+.app-dialog fieldset { margin: 18px 0; border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
 .app-dialog legend { padding: 0 7px; font-weight: 800; }
 .dialog-text-input {
   display: block;
@@ -237,10 +244,46 @@ label { font-weight: 700; }
   min-height: 44px;
   margin-top: 8px;
   border: 2px solid var(--border);
-  border-radius: 10px;
+  border-radius: 8px;
   padding: 8px 11px;
 }
 .dialog-text-input:focus { border-color: var(--accent); }
+.seed-option-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: end; }
+.seed-option-row .secondary-button { min-height: 44px; white-space: nowrap; }
+
+/* The verdict has to land where the student is looking. On a phone the keypad pushes the
+   feedback panel off-screen, so the answer region itself carries the immediate signal. */
+#limitAnswerArea, .choice-answer-area {
+  border-radius: 12px;
+  outline: 3px solid transparent;
+  outline-offset: 6px;
+}
+@keyframes answer-pulse-correct-frames {
+  0% { outline-color: transparent; background-color: transparent; }
+  22% { outline-color: var(--success); background-color: var(--success-bg); }
+  100% { outline-color: transparent; background-color: transparent; }
+}
+@keyframes answer-pulse-incorrect-frames {
+  0% { outline-color: transparent; background-color: transparent; }
+  22% { outline-color: var(--error); background-color: var(--error-bg); }
+  100% { outline-color: transparent; background-color: transparent; }
+}
+.answer-pulse-correct { animation: answer-pulse-correct-frames 1100ms ease-out 1; }
+.answer-pulse-incorrect { animation: answer-pulse-incorrect-frames 1100ms ease-out 1; }
+/* Reduced motion keeps the verdict but drops the movement: a held tint, no flash.
+   These carry the #limitAnswerArea id because the base rule above sets a transparent
+   outline through that id; a keyframed pulse outranks it, but a plain declaration does not. */
+.answer-pulse-static { animation: none !important; }
+#limitAnswerArea.answer-pulse-static.answer-pulse-correct,
+.choice-answer-area.answer-pulse-static.answer-pulse-correct {
+  outline-color: var(--success);
+  background-color: var(--success-bg);
+}
+#limitAnswerArea.answer-pulse-static.answer-pulse-incorrect,
+.choice-answer-area.answer-pulse-static.answer-pulse-incorrect {
+  outline-color: var(--error);
+  background-color: var(--error-bg);
+}
 .checkbox-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 11px 18px; }
 .checkbox-grid label { display: flex; gap: 9px; align-items: flex-start; font-weight: 550; }
 .checkbox-grid input { margin-top: 3px; }
@@ -255,7 +298,7 @@ label { font-weight: 700; }
   gap: 10px;
   margin: 18px 0;
 }
-.summary-stat { background: var(--surface-muted); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
+.summary-stat { background: var(--surface-muted); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
 .summary-stat strong { display: block; font-size: 1.5rem; }
 .summary-stat span { color: var(--muted); font-size: 0.82rem; }
 .progress-skills { display: grid; gap: 9px; }
@@ -265,7 +308,7 @@ label { font-weight: 700; }
 .skill-bar > span { display: block; height: 100%; background: var(--accent); }
 .skill-stat { color: var(--muted); font-size: 0.85rem; white-space: nowrap; }
 
-.debug-panel { grid-column: 1 / -1; padding: 12px 18px; }
+.debug-panel { grid-area: debug; padding: 12px 18px; }
 .debug-panel pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 
 /* SVG styling */
@@ -273,11 +316,31 @@ label { font-weight: 700; }
 .graph-axis { stroke: var(--axis); stroke-width: 2; }
 .graph-tick { stroke: var(--axis); stroke-width: 1.3; }
 .graph-label { fill: var(--muted); font-size: 16px; font-family: inherit; }
+.graph-fractional-label { font-size: 12px; opacity: 0.78; }
 .graph-axis-label { fill: var(--ink); font-size: 20px; font-style: italic; font-family: Georgia, serif; }
 .graph-curve { fill: none; stroke: var(--curve); stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
+.graph-curve-g { stroke: #8a3e91; stroke-dasharray: 12 9; stroke-linecap: butt; }
+.graph-legend-swatch { stroke-width: 6; }
+.graph-legend-swatch.graph-curve-g { stroke-dasharray: 9 8; }
+.graph-function-label, .graph-function-label-g { font-size: 26px; }
+.graph-function-label { fill: var(--curve); }
+.graph-open-point-g { stroke: #8a3e91; }
+.graph-closed-point-g { fill: #8a3e91; }
+.graph-function-label-g { fill: #8a3e91 !important; }
+.graph-continuation { fill: var(--curve); stroke: white; stroke-width: 2; }
+.graph-continuation-g { fill: #8a3e91; }
 .graph-open-point { fill: white; stroke: var(--curve); stroke-width: 4; }
 .graph-closed-point { fill: var(--curve); stroke: white; stroke-width: 2; }
 .graph-asymptote { stroke: #9b6b20; stroke-width: 2; stroke-dasharray: 8 8; opacity: 0.8; }
+.graph-horizontal-asymptote { stroke-dasharray: 10 7; }
+.graph-asymptote-label {
+  fill: #8a5f1c;
+  font-size: 17px;
+  font-weight: 700;
+  paint-order: stroke;
+  stroke: var(--surface);
+  stroke-width: 4px;
+}
 .animation-focus { stroke: var(--focus); stroke-width: 6; opacity: 0.32; }
 .animation-guide-left { stroke: #7c3a91; stroke-width: 3; stroke-dasharray: 8 6; }
 .animation-guide-right { stroke: #0c7289; stroke-width: 3; stroke-dasharray: 2 6; }
@@ -288,40 +351,88 @@ label { font-weight: 700; }
 .animation-banner { fill: white; stroke: var(--border); stroke-width: 2; }
 .animation-phase-banner { fill: rgba(255, 255, 255, 0.94); stroke: var(--border); stroke-width: 1.5; }
 .animation-phase-label { fill: var(--muted); font-size: 18px; font-weight: 800; paint-order: stroke; stroke: white; stroke-width: 4px; }
+.animation-direction-badge { fill: var(--accent-dark); font-size: 26px; font-weight: 900; paint-order: stroke; stroke: white; stroke-width: 5px; }
+.animation-oscillation-band { fill: rgba(138, 62, 145, 0.13); stroke: #8a3e91; stroke-width: 2; stroke-dasharray: 7 5; }
+.animation-final-note { fill: #fff8e5; stroke: #d9b85f; stroke-width: 2; }
+.mastery-label { font-size: 0.78rem; font-weight: 800; }
+.mastery-strong { color: var(--success); }
+.mastery-developing { color: var(--warning); }
+.mastery-needs-practice { color: var(--error); }
+.progress-misconceptions { margin-top: 20px; }
+.progress-misconceptions h3 { margin-bottom: 8px; }
+.misconception-row { display: flex; justify-content: space-between; gap: 16px; border-top: 1px solid var(--border); padding: 9px 0; }
 
 @media (max-width: 850px) {
   .app-header { align-items: flex-start; }
-  .app-shell { grid-template-columns: 1fr; }
-  .question-card { position: static; }
+  .app-shell {
+    grid-template-columns: 1fr;
+    grid-template-areas: "question" "graph" "answer" "debug";
+  }
+  .question-strip { position: sticky; top: 0; z-index: 4; box-shadow: 0 8px 20px rgba(28, 40, 61, 0.1); }
   .graph-card { padding: 14px; }
-  .question-card { padding: 20px; }
+  .question-strip { padding: 12px 20px 10px; }
+  .answer-card { padding: 16px 20px 20px; }
 }
 
 @media (max-width: 620px) {
   .app-header { padding: 16px 14px 12px; display: block; }
-  .header-actions { margin-top: 13px; display: grid; grid-template-columns: repeat(3, 1fr); }
-  .header-actions button { padding: 9px 7px; }
+  .header-actions { margin-top: 13px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .header-actions button { width: 100%; min-width: 0; max-width: 100%; padding: 9px 4px; font-size: 0.82rem; white-space: normal; overflow: hidden; }
   .app-shell { padding: 0 10px 24px; gap: 12px; }
+  .app-header h1 { font-size: 1.45rem; }
+  .app-header .eyebrow { display: none; }
+  .question-label { margin-bottom: 2px; }
+  .question-math { min-height: 40px; font-size: 1.3rem; }
+  .question-math.question-composition,
+  .question-math.question-limitLaw { font-size: 1.08rem; }
+  .question-prompt { font-size: 0.84rem; }
   .card-heading-row { display: block; }
-  .seed-control { width: fit-content; margin-top: 10px; }
+  .card-heading-row p { overflow-wrap: anywhere; }
+  /* Side by side, the nowrap button left the seed field about six characters wide, which is
+     unusable for a 21-character seed. */
+  .seed-option-row { grid-template-columns: 1fr; }
+  /* Keeps Save and start reachable without scrolling the whole dialog. */
+  .app-dialog .dialog-actions {
+    position: sticky;
+    bottom: 0;
+    margin-top: 12px;
+    padding: 12px 0 2px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+  }
   /* The SVG letterboxes inside any frame taller than its viewBox, so a 1.25 frame drew the
      same size graph as this one and simply wasted ~28% of the card height. */
-  .graph-frame { margin-top: 10px; aspect-ratio: 900 / 520; }
+  .graph-frame { margin-top: 6px; aspect-ratio: 900 / 520; }
+  .graph-panel-heading { margin-top: 3px; }
 
   /* Graph text is sized in viewBox units. On a phone the drawing scales to roughly 0.38,
      which rendered the axis numbers at about 6px. These keep them legible on the device the
      graph is actually read on. */
   .graph-label { font-size: 32px; }
+  .graph-asymptote-label { font-size: 30px; stroke-width: 7px; }
+  .graph-function-label, .graph-function-label-g { font-size: 36px; }
+  /* At phone scale these rendered at 8.3px with only 2.1px between neighbours on the x-axis,
+     which reads as noise along the axis rather than as numbers. No font size fixes that at
+     this viewBox, so the half-unit gridlines carry the scale and the integer labels anchor
+     it. */
+  .graph-fractional-label { display: none; }
   .graph-axis-label { font-size: 36px; }
   .animation-label { font-size: 34px; stroke-width: 7px; }
   .animation-phase-label { font-size: 30px; stroke-width: 6px; }
   .graph-curve { stroke-width: 6; }
+  .graph-curve-g { stroke-dasharray: 6 8; stroke-linecap: butt; }
+  .graph-legend-swatch.graph-curve-g { stroke-dasharray: 7 8; }
   .graph-open-point, .graph-closed-point { r: 13; stroke-width: 5; }
   .animation-focus { stroke-width: 10; }
   .mobile-keypad { display: grid; }
   .answer-row { grid-template-columns: 1fr; }
   .answer-row .submit-button { display: none; }
-  #answerInput { font-size: 16px; }
+  #answerInput { font-size: 18px; background: var(--surface); caret-color: transparent; }
+  .answer-card label { font-size: 0.86rem; }
+  .answer-card .help-text { display: none; }
+  /* 44px is the smallest comfortable touch target; these were landing at 43.3px. */
+  .special-answer-buttons { margin-top: 8px; }
+  .special-answer-buttons button { min-height: 46px; }
   .checkbox-grid { grid-template-columns: 1fr; }
   .range-row { grid-template-columns: 1fr; }
   .progress-summary { grid-template-columns: 1fr; }
