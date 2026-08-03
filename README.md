@@ -1,27 +1,10 @@
 # Graphical Limits Trainer
 
-A dependency-free Calculus I practice app for reading function values, limits, continuity, limit laws, and compositions from graphs.
+**[Open the trainer](https://sebo2151.github.io/graphical-limits-trainer/)**
 
-## Run it
+A free, dependency-free Calculus I practice tool for reading function values, limits, continuity, limit laws, and compositions directly from graphs. Built for students at Wake Forest University and shared openly for use in other calculus courses.
 
-The app uses JavaScript modules, so serve the folder rather than opening `index.html` directly:
-
-```bash
-cd graphical-limits-trainer
-python3 -m http.server 8000
-```
-
-Then open `http://localhost:8000/`. The same folder can be published directly with GitHub Pages.
-
-### Test on a phone without deploying
-
-The phone and computer must be on the same Wi-Fi network. On Windows:
-
-```powershell
-py -m http.server 8000 --bind 0.0.0.0
-```
-
-Find the computer's Wi-Fi IPv4 address with `ipconfig`, then open `http://ADDRESS:8000/` on the phone. A real phone is still useful for checking vibration behavior, although the app's custom answer keypad now prevents the system keyboard from covering the exercise.
+Nothing you do in the app is collected or sent anywhere. Progress is stored only in your own browser (`localStorage`) and can be exported or reset at any time. There are no accounts, no server, and no tracking.
 
 ## Problem families
 
@@ -61,7 +44,43 @@ On narrow screens the question appears immediately above the graph and stays pin
 
 Because the keypad pushes the feedback panel below the fold on a phone, submitting an answer pulses the answer region green or red for the immediate verdict and then scrolls the feedback into view by the smallest amount that reveals it, which keeps the graph on screen after a wrong answer. Starting the next problem scrolls back to the question. Both respect the reduced-motion setting: the pulse becomes a held tint and the scrolling becomes instant.
 
-## Tests
+## Credits
+
+Built by Sebastian Bozlee ([Wake Forest University](https://wfu.edu)) in collaboration with Claude (Anthropic) and ChatGPT (OpenAI).
+
+## License
+
+[MIT](LICENSE) — free to use, adapt, and reshare, including for other courses and institutions. A link back is appreciated but not required.
+
+---
+
+## For developers
+
+<details>
+<summary>Running locally, tests, and file structure</summary>
+
+### Run it locally
+
+The app uses JavaScript modules, so serve the folder rather than opening `index.html` directly:
+
+```bash
+cd graphical-limits-trainer
+python3 -m http.server 8000
+```
+
+Then open `http://localhost:8000/`. The same folder can be published directly with GitHub Pages.
+
+#### Test on a phone without deploying
+
+The phone and computer must be on the same Wi-Fi network. On Windows:
+
+```powershell
+py -m http.server 8000 --bind 0.0.0.0
+```
+
+Find the computer's Wi-Fi IPv4 address with `ipconfig`, then open `http://ADDRESS:8000/` on the phone. A real phone is still useful for checking vibration behavior, although the app's custom answer keypad now prevents the system keyboard from covering the exercise.
+
+### Tests
 
 Run semantic generator tests with:
 
@@ -81,7 +100,7 @@ This dependency-free runner uses an installed Chrome or Edge browser through the
 
 Open `tests.html` through the local server for lightweight in-browser smoke tests.
 
-## File structure
+### File structure
 
 - `index.html` - application shell and controls
 - `styles.css` - responsive layout and SVG styling
@@ -92,9 +111,11 @@ Open `tests.html` through the local server for lightweight in-browser smoke test
 - `browser-tests.mjs` - automated desktop/mobile browser regressions
 - `tests.html` - browser smoke tests
 
-## Still deferred
+### Still deferred
 
 - Instructor-created fixed problem sets and assignments
 - Importing or synchronizing progress across devices
 - A full nonvisual parallel exercise mode
 - Account-based storage or a server backend
+
+</details>
