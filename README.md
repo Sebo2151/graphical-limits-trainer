@@ -40,7 +40,9 @@ Allow Python through Windows Firewall if prompted. Browser developer tools can s
 - Function-value, one-sided, two-sided, continuity, and classification questions
 - Targeted feedback for common misconceptions
 - A “Show me” SVG animation after two incorrect attempts; it plays twice automatically, then stops on the conclusion with pause and replay controls
-- Staged left, right, and simultaneous animation for two-sided limits
+- Staged left, right, and simultaneous animation for two-sided limits, continuity, and classification, ending on the function value where that matters
+- Unbounded branches are traced without a y-axis readout, and oscillatory branches leave a trail showing the values never settle
+- A graph window whose offset varies, so locating the tested x-value stays part of the exercise
 - Secondary discontinuities and coordinate-swap distractors away from the point being tested
 - Mobile keypad and optional vibration feedback
 - Reduced-motion setting
@@ -60,6 +62,16 @@ node tests.mjs
 Open `tests.html` through the local server for browser smoke tests.
 
 The Node test suite samples 7,500 generated problems across all three difficulty levels and checks exact arithmetic, deterministic generation, classification invariants, and branch behavior.
+
+It also covers the wording and framing decisions that are easy to regress silently:
+
+- explanations never describe `DNE` or `±∞` as a value the graph approaches, and a continuity failure always names which of the three conditions fails
+- wrong-answer feedback never cites a requirement the student's own graph already satisfies, which would read as agreement with the wrong answer
+- the graph window is not centred on the tested x-value in every problem
+- distractor holes sit at readable heights and exactly on the curve they puncture
+- an unbounded two-sided limit is stated as `+∞` or `−∞` rather than `DNE`, and rejecting `DNE` explains why
+
+Behavior that lives in the DOM layer, such as the animation suppressing the y-axis readout on an unbounded branch, is guarded by source checks in `testInterfaceRegressions` rather than executed.
 
 ## Deliberately deferred
 

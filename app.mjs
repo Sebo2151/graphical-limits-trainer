@@ -8,6 +8,7 @@ import {
   diagnoseWrongAnswer,
   explanationText,
   generateProblem,
+  mathQuestionDescription,
   normalizeConfig,
   parseLimitAnswer,
   serializeProblem,
@@ -19,8 +20,6 @@ const STORAGE_PROGRESS = 'graphicalLimitsTrainer.progress.v1';
 
 const elements = {
   graphSvg: document.querySelector('#graphSvg'),
-  graphFrame: document.querySelector('#graphFrame'),
-  graphDescription: document.querySelector('#graphDescription'),
   seedLabel: document.querySelector('#seedLabel'),
   copySeedButton: document.querySelector('#copySeedButton'),
   questionHeading: document.querySelector('#questionHeading'),
@@ -92,8 +91,11 @@ function initialize() {
   populateOptionsForm();
   updateDifficultyDescription();
   const params = new URLSearchParams(location.search);
+  // A shared link should set up this session only. Persisting it would silently overwrite
+  // the settings of whoever opened the link.
+  const sharedConfig = params.has('d') || params.get('q') || params.get('g');
   appConfig = configFromUrl(params, appConfig);
-  saveConfigToStorage();
+  if (!sharedConfig) saveConfigToStorage();
   populateOptionsForm();
   updateDifficultyDescription();
   const seed = params.get('seed') || randomSeed();
@@ -114,6 +116,7 @@ function bindEvents() {
 
   document.querySelectorAll('[data-answer]').forEach((button) => {
     button.addEventListener('click', () => {
+      if (elements.answerInput.disabled) return;
       elements.answerInput.value = button.dataset.answer;
       elements.answerInput.focus();
     });
@@ -131,10 +134,9 @@ function bindEvents() {
   elements.exportProgressButton.addEventListener('click', exportProgress);
 
   window.addEventListener('keydown', (event) => {
-    if (event.key.toLowerCase() === 'n' && event.altKey) {
-      event.preventDefault();
-      startProblem(randomSeed());
-    }
+    if (!event.altKey || event.key?.toLowerCase() !== 'n') return;
+    event.preventDefault();
+    startProblem(randomSeed());
   });
 }
 
@@ -249,6 +251,9 @@ function shortSeed(seed) {
 
 function renderQuestion(question) {
   elements.questionHeading.innerHTML = questionMathML(question);
+  // Assistive-technology support for MathML is uneven, so the heading also carries the
+  // question as plain prose.
+  elements.questionHeading.setAttribute('aria-label', mathQuestionDescription(question));
   elements.questionPrompt.textContent = questionPrompt(question);
 
   const isLimitInput = question.inputMode === 'limit';
@@ -843,7 +848,7 @@ function renderTwoSidedExplanation(layer, progressValue) {
   }
 
   if (progressValue < togetherEnd) {
-    renderPhaseLabel(layer, 'Finally: compare both sides');
+    renderPhaseLabel(layer, needsFunctionValue() ? 'Finally: compare both sides with f(a)' : 'Finally: compare both sides');
     const togetherProgress = (progressValue - rightEnd) / (togetherEnd - rightEnd);
     renderApproach(layer, 'left', togetherProgress);
     renderApproach(layer, 'right', togetherProgress);
@@ -852,7 +857,30 @@ function renderTwoSidedExplanation(layer, progressValue) {
 
   renderApproach(layer, 'left', 1);
   renderApproach(layer, 'right', 1);
+  if (needsFunctionValue()) renderFunctionValueMarker(layer);
   renderAnswerBanner(layer);
+}
+
+// Continuity and classification both turn on f(a) as well as the two one-sided limits, so
+// the trace has to end by pointing at the filled point rather than only at the approaches.
+function needsFunctionValue() {
+  return problem.question.type === 'continuity' || problem.question.type === 'classification';
+}
+
+function renderFunctionValueMarker(layer) {
+  const scene = problem.scene;
+  const x = mapX(scene.aNumber);
+  if (scene.value === null) {
+    layer.append(svgElement('text', {
+      x, y: mapY(0) - 30, 'text-anchor': 'middle', class: 'animation-label',
+    }, `no value at x = ${scene.a}`));
+    return;
+  }
+  const y = mapY(scene.value.toNumber());
+  layer.append(svgElement('circle', { cx: x, cy: y, r: 15, class: 'animation-target' }));
+  layer.append(svgElement('text', {
+    x: x + 22, y: y - 18, class: 'animation-label',
+  }, `f(${scene.a}) = ${scene.value}`));
 }
 
 function renderPhaseLabel(layer, text) {
@@ -882,19 +910,42 @@ function renderFunctionValueExplanation(layer, progressValue) {
   }
 }
 
+function approachDistance(branch, progressValue) {
+  if (branch.kind === 'oscillatory') return branch.frequency / (0.5 + 34 * progressValue);
+  return 0.075 + 3.7 * ((1 - progressValue) ** 2.2);
+}
+
+function clampToPlot(y, scene) {
+  return Math.min(scene.yRange.max - 0.08, Math.max(scene.yRange.min + 0.08, y));
+}
+
+// An oscillating branch never settles, which a single moving dot cannot show. Leaving a
+// fading trail of earlier y-readouts makes the values visibly revisit the same band no
+// matter how close x gets to a.
+function renderOscillationTrail(layer, side, progressValue, pointClass) {
+  const scene = problem.scene;
+  const branch = side === 'left' ? scene.left : scene.right;
+  const yAxisX = mapX(0);
+  for (let step = 1; step <= 7; step += 1) {
+    const past = progressValue - step * 0.04;
+    if (past <= 0) break;
+    const distance = approachDistance(branch, past);
+    const x = side === 'left' ? scene.aNumber - distance : scene.aNumber + distance;
+    const marker = svgElement('circle', {
+      cx: yAxisX, cy: mapY(clampToPlot(branch.eval(x), scene)), r: 5, class: pointClass,
+    });
+    marker.setAttribute('opacity', (0.5 - step * 0.055).toFixed(2));
+    layer.append(marker);
+  }
+}
+
 function renderApproach(layer, side, progressValue) {
   const scene = problem.scene;
   const branch = side === 'left' ? scene.left : scene.right;
-  let distance;
-  if (branch.kind === 'oscillatory') {
-    const t = 0.5 + 34 * progressValue;
-    distance = branch.frequency / t;
-  } else {
-    distance = 0.075 + 3.7 * ((1 - progressValue) ** 2.2);
-  }
+  const unbounded = branch.limit.kind === 'posInf' || branch.limit.kind === 'negInf';
+  const distance = approachDistance(branch, progressValue);
   const xValue = side === 'left' ? scene.aNumber - distance : scene.aNumber + distance;
-  const rawY = branch.eval(xValue);
-  const visibleY = Math.min(scene.yRange.max - 0.08, Math.max(scene.yRange.min + 0.08, rawY));
+  const visibleY = clampToPlot(branch.eval(xValue), scene);
   const px = mapX(xValue);
   const py = mapY(visibleY);
   const axisY = mapY(0);
@@ -905,25 +956,32 @@ function renderApproach(layer, side, progressValue) {
   layer.append(svgElement('circle', { cx: px, cy: axisY, r: 7, class: pointClass }));
   layer.append(svgElement('line', { x1: px, y1: axisY, x2: px, y2: py, class: guideClass }));
   layer.append(svgElement('circle', { cx: px, cy: py, r: 8, class: pointClass }));
-  layer.append(svgElement('line', { x1: px, y1: py, x2: yAxisX, y2: py, class: guideClass }));
-  layer.append(svgElement('circle', { cx: yAxisX, cy: py, r: 7, class: pointClass }));
+
+  // The y-value is clamped to keep the dot on screen, so on an unbounded branch reading it
+  // back against the y-axis would announce a finite height the function never approaches.
+  if (!unbounded) {
+    if (branch.kind === 'oscillatory') renderOscillationTrail(layer, side, progressValue, pointClass);
+    layer.append(svgElement('line', { x1: px, y1: py, x2: yAxisX, y2: py, class: guideClass }));
+    layer.append(svgElement('circle', { cx: yAxisX, cy: py, r: 7, class: pointClass }));
+  }
 
   if (branch.limit.kind === 'finite') {
     layer.append(svgElement('circle', {
       cx: mapX(scene.aNumber), cy: mapY(branch.limit.value.toNumber()), r: 15,
       class: 'animation-target',
     }));
-  } else if (branch.limit.kind === 'posInf' || branch.limit.kind === 'negInf') {
+  } else if (unbounded) {
     const upward = branch.limit.kind === 'posInf';
-    const y = upward ? margins.top + 24 : viewport.height - margins.bottom - 12;
+    const edgeY = upward ? margins.top + 4 : viewport.height - margins.bottom - 4;
+    layer.append(svgElement('line', { x1: px, y1: py, x2: px, y2: edgeY, class: guideClass }));
     layer.append(svgElement('text', {
-      x: px, y, 'text-anchor': 'middle', class: 'animation-label',
+      x: px, y: upward ? margins.top + 26 : viewport.height - margins.bottom - 14,
+      'text-anchor': 'middle', class: 'animation-label',
     }, upward ? '↑ +∞' : '↓ −∞'));
   } else if (progressValue > 0.68) {
-    const y = mapY(branch.offset ?? 0);
     layer.append(svgElement('text', {
       x: mapX(scene.aNumber) + (side === 'left' ? -35 : 35),
-      y,
+      y: mapY(branch.offset ?? 0),
       'text-anchor': 'middle',
       class: 'animation-label',
     }, '?'));
@@ -950,7 +1008,10 @@ function answerBannerText() {
 
 function populateOptionsForm() {
   elements.difficultyInput.value = String(appConfig.difficulty);
-  elements.seedInput.value = problem?.seed ?? '';
+  // Left blank so that saving new settings serves a fresh problem, as the help text says.
+  // The current seed is offered as a placeholder for anyone who wants to reuse it.
+  elements.seedInput.value = '';
+  elements.seedInput.placeholder = problem?.seed ?? '';
   document.querySelectorAll('input[name="questionType"]').forEach((input) => {
     input.checked = Boolean(appConfig.questionTypes[input.value]);
   });
@@ -1001,13 +1062,20 @@ function saveOptions() {
   startProblem(elements.seedInput.value.trim() || randomSeed());
 }
 
+// Only the form is reset. Touching appConfig here would leave memory, storage, and the
+// problem on screen disagreeing if the dialog were then dismissed instead of saved.
 function resetOptionsForm() {
-  appConfig = {
-    ...normalizeConfig(DEFAULT_CONFIG),
-    haptics: true,
-    reducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
-  };
-  populateOptionsForm();
+  const defaults = normalizeConfig(DEFAULT_CONFIG);
+  elements.difficultyInput.value = String(defaults.difficulty);
+  elements.seedInput.value = '';
+  document.querySelectorAll('input[name="questionType"]').forEach((input) => {
+    input.checked = Boolean(defaults.questionTypes[input.value]);
+  });
+  document.querySelectorAll('input[name="feature"]').forEach((input) => {
+    input.checked = Boolean(defaults.features[input.value]);
+  });
+  elements.hapticsInput.checked = true;
+  elements.reducedMotionInput.checked = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   updateDifficultyDescription();
   elements.optionsError.textContent = '';
 }
@@ -1018,10 +1086,11 @@ function openProgress() {
 }
 
 function renderProgress() {
-  const firstRate = progress.totalProblems ? Math.round((progress.firstCorrect / progress.totalProblems) * 100) : 0;
+  const rate = (count) => (progress.totalProblems ? Math.round((count / progress.totalProblems) * 100) : 0);
   elements.progressSummary.innerHTML = `
     <div class="summary-stat"><strong>${progress.totalProblems}</strong><span>problems attempted</span></div>
-    <div class="summary-stat"><strong>${firstRate}%</strong><span>correct on first attempt</span></div>
+    <div class="summary-stat"><strong>${rate(progress.firstCorrect)}%</strong><span>correct on first attempt</span></div>
+    <div class="summary-stat"><strong>${rate(progress.eventualCorrect)}%</strong><span>solved eventually</span></div>
     <div class="summary-stat"><strong>${progress.showMe}</strong><span>show-me explanations</span></div>
   `;
 
@@ -1080,8 +1149,11 @@ function exportProgress() {
   const anchor = document.createElement('a');
   anchor.href = url;
   anchor.download = 'graphical-limits-progress.json';
+  document.body.append(anchor);
   anchor.click();
-  URL.revokeObjectURL(url);
+  anchor.remove();
+  // Revoking in the same tick can cancel the download before the browser has read the blob.
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 function configFromUrl(params, fallback) {
