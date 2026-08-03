@@ -329,6 +329,10 @@ function makeDistractor(scene, xValue, desiredValue, purpose, rng) {
   if (xNumber <= scene.xRange.min + 0.65 || xNumber >= scene.xRange.max - 0.65) return null;
 
   const branch = xNumber < scene.aNumber ? scene.left : scene.right;
+  if (branch.domainOuter !== undefined) {
+    if (branch.side === 'left' && xNumber < branch.domainOuter) return null;
+    if (branch.side === 'right' && xNumber > branch.domainOuter) return null;
+  }
   // A hole has to sit exactly on the drawn curve at a height the student can read off the
   // grid. Only the polynomial branches supply an exact value, and infinite or oscillatory
   // branches would put the open circle at an unreadable height such as 0.7784.
@@ -389,6 +393,25 @@ function buildDistractors(scene, rng) {
   }
 
   return distractors;
+}
+
+function buildDomainEndpoints(scene, rng) {
+  if (scene.difficulty < 3 || !rng.bool(0.28)) return [];
+  for (const side of rng.shuffle(['left', 'right'])) {
+    const branch = scene[side];
+    // The endpoint carries an open or filled circle, so like a distractor hole it has to sit
+    // at an exact height the student can read off the grid. Only a polynomial branch gives
+    // one; an infinite or oscillatory branch would put the marker at, say, y = -0.6027.
+    if (branch.kind !== 'polynomial') continue;
+    const xNumber = side === 'left' ? scene.xRange.min + 1 : scene.xRange.max - 1;
+    const yValue = polynomialValueAt(branch, new Rational(xNumber));
+    if (yValue.d > 2n) continue;
+    const y = yValue.toNumber();
+    if (y <= scene.yRange.min + 0.35 || y >= scene.yRange.max - 0.35) continue;
+    branch.domainOuter = xNumber;
+    return [{ side, xNumber, y, yValue, closed: rng.bool() }];
+  }
+  return [];
 }
 
 function constructScene(seed, config) {
@@ -497,6 +520,7 @@ function constructScene(seed, config) {
   scene.twoSidedLimit = twoSidedLimit(scene);
   scene.isContinuous = isContinuous(scene);
   scene.classification = classifyScene(scene);
+  scene.domainEndpoints = buildDomainEndpoints(scene, rng);
   scene.distractors = buildDistractors(scene, rng);
   return scene;
 }
@@ -842,6 +866,12 @@ export function serializeProblem(problem) {
       x: item.x.toString(),
       holeY: item.holeValue.toString(),
       value: item.value.toString(),
+    })),
+    domainEndpoints: scene.domainEndpoints.map((item) => ({
+      side: item.side,
+      x: item.xNumber,
+      y: item.yValue.toString(),
+      closed: item.closed,
     })),
     questionType: question.type,
     expected: answerText(question.answer),
