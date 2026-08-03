@@ -297,6 +297,14 @@ function chooseA(rng, difficulty) {
   return rng.pick(choices);
 }
 
+// The tested x-value must not sit at the centre of every graph, or reading its position off
+// the axis stops being part of the exercise. The bounds keep at least four units of curve on
+// each side of a and keep the y-axis at least two units inside the frame, because the
+// explanation animation reads y-values back against it.
+function chooseFrameShift(rng, a) {
+  return rng.int(Math.max(-2, -4 - a), Math.min(2, 4 - a));
+}
+
 function polynomialValueAt(branch, x) {
   const xValue = Rational.from(x);
   const dx = xValue.sub(new Rational(branch.a));
@@ -321,9 +329,14 @@ function makeDistractor(scene, xValue, desiredValue, purpose, rng) {
   if (xNumber <= scene.xRange.min + 0.65 || xNumber >= scene.xRange.max - 0.65) return null;
 
   const branch = xNumber < scene.aNumber ? scene.left : scene.right;
-  const exactHoleValue = branch.kind === 'polynomial' ? polynomialValueAt(branch, x) : null;
-  const holeY = exactHoleValue ? exactHoleValue.toNumber() : branch.eval(xNumber);
-  if (!Number.isFinite(holeY) || holeY <= scene.yRange.min + 0.7 || holeY >= scene.yRange.max - 0.7) return null;
+  // A hole has to sit exactly on the drawn curve at a height the student can read off the
+  // grid. Only the polynomial branches supply an exact value, and infinite or oscillatory
+  // branches would put the open circle at an unreadable height such as 0.7784.
+  if (branch.kind !== 'polynomial') return null;
+  const holeValue = polynomialValueAt(branch, x);
+  if (scene.difficulty === 1 ? holeValue.d !== 1n : holeValue.d > 2n) return null;
+  const holeY = holeValue.toNumber();
+  if (holeY <= scene.yRange.min + 0.7 || holeY >= scene.yRange.max - 0.7) return null;
 
   let value = Rational.from(desiredValue);
   let resolvedPurpose = purpose;
@@ -340,7 +353,7 @@ function makeDistractor(scene, xValue, desiredValue, purpose, rng) {
     purpose: resolvedPurpose,
     x,
     xNumber,
-    holeValue: exactHoleValue,
+    holeValue,
     holeY,
     value,
   };
@@ -414,8 +427,9 @@ function constructScene(seed, config) {
       const rightLimit = distinctRational(rng, leftLimit, difficulty, -3, 3);
       left = polynomialBranch('left', a, leftLimit, rng, difficulty);
       right = polynomialBranch('right', a, rightLimit, rng, difficulty);
+      // leftLimit and rightLimit are distinct by construction, so f(a) may match one of
+      // them, sit somewhere else entirely, or be undefined.
       value = rng.pick([leftLimit, rightLimit, null, distinctRational(rng, leftLimit, difficulty, -4, 4)]);
-      if (value && value.equals(rightLimit) && value.equals(leftLimit)) value = null;
       break;
     }
     case 'infiniteSame': {
@@ -466,6 +480,7 @@ function constructScene(seed, config) {
       throw new Error(`Unsupported feature: ${feature}`);
   }
 
+  const frameShift = chooseFrameShift(rng, a);
   const scene = {
     seed: String(seed),
     feature,
@@ -475,7 +490,7 @@ function constructScene(seed, config) {
     left,
     right,
     value,
-    xRange: { min: a - 6, max: a + 6 },
+    xRange: { min: a - 6 + frameShift, max: a + 6 + frameShift },
     yRange: { min: -6, max: 6 },
   };
 
@@ -578,6 +593,7 @@ export function buildQuestion(scene, config, rng = new RNG(`${scene.seed}:questi
         skill: `continuity:${scene.classification}`,
         answer: choice(scene.isContinuous ? 'yes' : 'no'),
         inputMode: 'choice',
+        side: 'both',
         choices: [
           { value: 'yes', label: 'Yes' },
           { value: 'no', label: 'No' },
@@ -589,6 +605,7 @@ export function buildQuestion(scene, config, rng = new RNG(`${scene.seed}:questi
         skill: `classification:${scene.classification}`,
         answer: choice(scene.classification),
         inputMode: 'choice',
+        side: 'both',
         choices: rng.shuffle([
           { value: 'continuous', label: 'Continuous' },
           { value: 'removable', label: 'Removable' },
@@ -621,38 +638,65 @@ export function mathQuestionDescription(question) {
   }
 }
 
+// Feedback has to be read against the scene the student is actually looking at. Naming a
+// requirement that their scene already satisfies reads as agreement, so every branch below
+// states the condition that fails for this particular graph.
+// Both helpers assume the submission is already known to be wrong.
+function diagnoseContinuity(scene, submitted) {
+  if (submitted.value !== 'yes') {
+    return 'All three conditions hold here: f is defined at that x-value, the two-sided limit exists, and the two agree.';
+  }
+  if (scene.value === null) {
+    return 'There is no filled point at that x-value, so f is undefined there and cannot be continuous.';
+  }
+  if (scene.twoSidedLimit.kind !== 'finite') {
+    return 'Continuity needs a finite two-sided limit, and the two sides do not settle on one finite number here.';
+  }
+  return 'Both sides approach a finite number, but the filled point sits at a different height, so the graph is broken there.';
+}
+
+function diagnoseClassification(scene, submitted) {
+  const bothFinite = scene.left.limit.kind === 'finite' && scene.right.limit.kind === 'finite';
+  const limitsAgree = answersEqual(scene.left.limit, scene.right.limit);
+
+  switch (submitted.value) {
+    case 'continuous':
+      if (scene.value === null) {
+        return 'There is no filled point at that x-value, so f is undefined there and the graph cannot be continuous.';
+      }
+      if (scene.twoSidedLimit.kind !== 'finite') {
+        return 'Continuity needs a finite two-sided limit, and the two sides do not settle on one finite number here.';
+      }
+      return 'Both sides do approach one finite number, but the filled point sits at a different height, so the graph is broken there.';
+    case 'removable':
+      if (!bothFinite) {
+        return 'A removable discontinuity needs a finite limit from each side, and at least one side here never settles on a finite number.';
+      }
+      if (!limitsAgree) {
+        return 'The two one-sided limits here are different finite numbers, so no single filled point could close the gap.';
+      }
+      return 'Both sides do approach the same finite number, and the filled point is already sitting there, so there is nothing to remove.';
+    case 'jump':
+      if (!bothFinite) {
+        return 'A jump needs a finite limit on each side, and at least one side here never settles on a finite number.';
+      }
+      return 'Both one-sided limits here are the same number, so the graph does not step from one height to another.';
+    case 'infinite':
+      return 'An infinite discontinuity needs the y-values to grow without bound near the point, and neither side does that here.';
+    case 'oscillatory':
+      return 'An oscillatory discontinuity needs y-values that keep swinging between the same heights however close you get, and neither side does that here.';
+    default:
+      return 'Compare both one-sided limits with the function value at that point.';
+  }
+}
+
 export function diagnoseWrongAnswer(problem, submitted) {
   const { scene, question } = problem;
   const correct = question.answer;
 
   if (question.inputMode === 'choice') {
-    if (question.type === 'continuity') {
-      if (!scene.value && submitted.value === 'yes') {
-        return 'The function is not defined at the point, so it cannot be continuous there.';
-      }
-      if (scene.twoSidedLimit.kind !== 'finite' && submitted.value === 'yes') {
-        return 'Continuity requires a finite two-sided limit that equals the function value.';
-      }
-      if (scene.twoSidedLimit.kind === 'finite' && scene.value && !scene.value.equals(scene.twoSidedLimit.value)) {
-        return 'The nearby values approach a finite number, but the function value is different.';
-      }
-      return 'Compare the function value with the behavior from both sides.';
-    }
-    if (question.type === 'classification') {
-      if (submitted.value === 'jump' && scene.left.limit.kind === 'finite' && scene.right.limit.kind === 'finite') {
-        return 'A jump requires different finite left- and right-hand limits.';
-      }
-      if (submitted.value === 'removable') {
-        return 'A removable discontinuity requires the same finite limit from both sides.';
-      }
-      if (submitted.value === 'infinite') {
-        return 'An infinite discontinuity has values that grow without bound near the point.';
-      }
-      if (submitted.value === 'oscillatory') {
-        return 'Oscillatory behavior repeatedly visits different y-values instead of settling.';
-      }
-      return 'Compare both one-sided limits and the function value.';
-    }
+    if (question.type === 'continuity') return diagnoseContinuity(scene, submitted);
+    if (question.type === 'classification') return diagnoseClassification(scene, submitted);
   }
 
   if (question.type === 'functionValue' && submitted.kind === 'finite') {
@@ -703,6 +747,53 @@ export function diagnoseWrongAnswer(problem, submitted) {
   return 'Focus only on the branch or point named in the question.';
 }
 
+// Only a finite limit is something the y-values "approach". Saying they approach DNE, or
+// approach +∞, teaches exactly the language this trainer exists to correct, so every
+// non-finite case gets its own wording.
+function oneSidedExplanation(question, a) {
+  const from = question.type === 'leftLimit' ? 'from the left' : 'from the right';
+  switch (question.answer.kind) {
+    case 'finite':
+      return `As x approaches ${a} ${from}, the graph's y-values approach ${answerText(question.answer)}.`;
+    case 'posInf':
+      return `As x approaches ${a} ${from}, the graph's y-values increase without bound, so the limit is +∞.`;
+    case 'negInf':
+      return `As x approaches ${a} ${from}, the graph's y-values decrease without bound, so the limit is −∞.`;
+    default:
+      return `As x approaches ${a} ${from}, the graph's y-values keep swinging between the same heights instead of settling near one number, so this one-sided limit does not exist.`;
+  }
+}
+
+function twoSidedFailureReason(scene) {
+  const left = scene.left.limit;
+  const right = scene.right.limit;
+  if (left.kind === 'dne' || right.kind === 'dne') {
+    return 'At least one side keeps swinging instead of settling near a single number';
+  }
+  if (left.kind === 'finite' && right.kind === 'finite') {
+    return `The left-hand limit is ${answerText(left)} and the right-hand limit is ${answerText(right)}`;
+  }
+  if (left.kind !== 'finite' && right.kind !== 'finite') {
+    return 'One side increases without bound while the other decreases without bound';
+  }
+  const finiteLimit = left.kind === 'finite' ? left : right;
+  const unboundedSide = left.kind === 'finite' ? 'right' : 'left';
+  return `One side approaches ${answerText(finiteLimit)} while the ${unboundedSide}-hand side grows without bound`;
+}
+
+function continuityExplanation(scene, a) {
+  if (scene.isContinuous) {
+    return `f(${a}) = ${scene.value}, the two-sided limit is also ${scene.value}, and the two agree, so f is continuous at x = ${a}.`;
+  }
+  if (scene.value === null) {
+    return `There is no filled point at x = ${a}, so f(${a}) is undefined and f is not continuous there.`;
+  }
+  if (scene.twoSidedLimit.kind !== 'finite') {
+    return `f(${a}) = ${scene.value}, but the two-sided limit at x = ${a} is not a finite number, so f is not continuous there.`;
+  }
+  return `The two-sided limit is ${answerText(scene.twoSidedLimit)}, but f(${a}) = ${scene.value}, so f is not continuous at x = ${a}.`;
+}
+
 export function explanationText(problem) {
   const { scene, question } = problem;
   const a = scene.a.toString();
@@ -713,18 +804,21 @@ export function explanationText(problem) {
         ? `There is no filled point at x = ${a}, so f(${a}) is undefined.`
         : `The filled point at x = ${a} has y-coordinate ${answer}, so f(${a}) = ${answer}.`;
     case 'leftLimit':
-      return `As x approaches ${a} from the left, the graph's y-values approach ${answer}.`;
     case 'rightLimit':
-      return `As x approaches ${a} from the right, the graph's y-values approach ${answer}.`;
+      return oneSidedExplanation(question, a);
     case 'twoSidedLimit':
-      if (question.answer.kind === 'dne') {
-        return `The left- and right-hand behaviors do not settle at the same value, so the two-sided limit does not exist.`;
+      if (question.answer.kind === 'finite') {
+        return `Both sides approach ${answer}, so the two-sided limit is ${answer}.`;
       }
-      return `Both sides approach ${answer}, so the two-sided limit is ${answer}.`;
+      if (question.answer.kind === 'posInf') {
+        return 'The y-values increase without bound from both sides, so the two-sided limit is +∞.';
+      }
+      if (question.answer.kind === 'negInf') {
+        return 'The y-values decrease without bound from both sides, so the two-sided limit is −∞.';
+      }
+      return `${twoSidedFailureReason(scene)}, so the two-sided limit does not exist.`;
     case 'continuity':
-      return scene.isContinuous
-        ? `The two-sided limit exists and equals f(${a}), so f is continuous at x = ${a}.`
-        : `Continuity fails because the two-sided limit, the function value, and their equality do not all hold.`;
+      return continuityExplanation(scene, a);
     case 'classification':
       return `The behavior at x = ${a} is classified as ${classificationLabel(scene.classification)}.`;
     default:
@@ -746,7 +840,7 @@ export function serializeProblem(problem) {
     distractors: scene.distractors.map((item) => ({
       purpose: item.purpose,
       x: item.x.toString(),
-      holeY: item.holeValue?.toString() ?? Number(item.holeY.toFixed(4)),
+      holeY: item.holeValue.toString(),
       value: item.value.toString(),
     })),
     questionType: question.type,

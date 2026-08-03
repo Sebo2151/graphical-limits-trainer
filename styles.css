@@ -251,7 +251,7 @@ label { font-weight: 700; }
 
 .progress-summary {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 10px;
   margin: 18px 0;
 }
@@ -304,7 +304,20 @@ label { font-weight: 700; }
   .app-shell { padding: 0 10px 24px; gap: 12px; }
   .card-heading-row { display: block; }
   .seed-control { width: fit-content; margin-top: 10px; }
-  .graph-frame { margin-top: 10px; aspect-ratio: 1.25; }
+  /* The SVG letterboxes inside any frame taller than its viewBox, so a 1.25 frame drew the
+     same size graph as this one and simply wasted ~28% of the card height. */
+  .graph-frame { margin-top: 10px; aspect-ratio: 900 / 520; }
+
+  /* Graph text is sized in viewBox units. On a phone the drawing scales to roughly 0.38,
+     which rendered the axis numbers at about 6px. These keep them legible on the device the
+     graph is actually read on. */
+  .graph-label { font-size: 32px; }
+  .graph-axis-label { font-size: 36px; }
+  .animation-label { font-size: 34px; stroke-width: 7px; }
+  .animation-phase-label { font-size: 30px; stroke-width: 6px; }
+  .graph-curve { stroke-width: 6; }
+  .graph-open-point, .graph-closed-point { r: 13; stroke-width: 5; }
+  .animation-focus { stroke-width: 10; }
   .mobile-keypad { display: grid; }
   .answer-row { grid-template-columns: 1fr; }
   .answer-row .submit-button { display: none; }
