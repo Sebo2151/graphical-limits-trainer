@@ -404,6 +404,15 @@ function testAdvancedFamilies() {
           assert.equal(problem.scene.breakpoint.rightY, problem.scene.right.eval(0));
           assert(Math.abs(problem.scene.breakpoint.leftY) <= 5.4);
           assert(Math.abs(problem.scene.breakpoint.rightY) <= 5.4);
+          // An unbounded end must visibly leave the plot. A branch still inside the window
+          // at the edge looks like it is leveling off toward a finite value.
+          for (const side of ['left', 'right']) {
+            const limit = problem.scene.endLimits[side];
+            if (limit.kind !== 'posInf' && limit.kind !== 'negInf') continue;
+            const edge = problem.scene[side].eval(side === 'left' ? problem.scene.xRange.min : problem.scene.xRange.max);
+            assert(Math.abs(edge) > problem.scene.yRange.max,
+              `An unbounded end limit must leave the plot before its edge (${seed}, ${side}: y = ${edge.toFixed(2)}).`);
+          }
         }
 
         if (family === 'limitLaws') {

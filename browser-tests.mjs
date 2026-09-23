@@ -277,7 +277,15 @@ try {
     reducedMotion: true,
     haptics: false
   }))`);
-  await navigate(`${base}/?seed=infinity-animation&f=a&d=3`, 390, 844);
+  // Reduced motion renders only the final frame. An unbounded end has left the plot by then,
+  // and its y-readout is deliberately withheld, so the readout check needs a finite end.
+  let readoutIndex = 0;
+  let readoutProblem;
+  do {
+    readoutProblem = generateProblem(`infinity-animation-${readoutIndex++}`,
+      { families: { point: false, atInfinity: true, limitLaws: false, composition: false }, difficulty: 3 });
+  } while (readoutProblem.question.answer.kind !== 'finite');
+  await navigate(`${base}/?seed=${encodeURIComponent(readoutProblem.seed)}&f=a&d=3`, 390, 844);
   await evaluate("document.querySelector('#showMeButton').click()");
   const infinityReadout = await evaluate(`({
     xGuide: Boolean(document.querySelector('.animation-at-infinity-x-guide')),

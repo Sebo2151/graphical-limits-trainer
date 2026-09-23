@@ -272,7 +272,11 @@ function endBranch(side, rng, difficulty, requestedLimit = null) {
       const distance = Math.abs(x) + 1;
       if (limit.kind === 'finite') return limit.value.toNumber() + amplitude / distance;
       const sign = limit.kind === 'posInf' ? 1 : -1;
-      return sign * (0.16 * distance ** power + Math.abs(amplitude) * 0.3);
+      // At 0.16 a linear branch rose barely a unit across the half-plot and ended near
+      // y = 2, which reads as leveling off rather than growing without bound. 0.75 carries
+      // every line out of the window before the plot edge while keeping f(0) small.
+      const growth = power === 1 ? 0.75 : 0.16;
+      return sign * (growth * distance ** power + Math.abs(amplitude) * 0.3);
     },
   };
 }
