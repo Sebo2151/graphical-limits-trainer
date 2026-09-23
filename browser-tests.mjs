@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { answerText, generateProblem } from './advanced.mjs';
+import { TOUR_PROBLEM, answerText, generateProblem } from './advanced.mjs';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const browserCandidates = process.platform === 'win32'
@@ -277,7 +277,15 @@ try {
     reducedMotion: true,
     haptics: false
   }))`);
-  await navigate(`${base}/?seed=infinity-animation&f=a&d=3`, 390, 844);
+  // Reduced motion renders only the final frame. An unbounded end has left the plot by then,
+  // and its y-readout is deliberately withheld, so the readout check needs a finite end.
+  let readoutIndex = 0;
+  let readoutProblem;
+  do {
+    readoutProblem = generateProblem(`infinity-animation-${readoutIndex++}`,
+      { families: { point: false, atInfinity: true, limitLaws: false, composition: false }, difficulty: 3 });
+  } while (readoutProblem.question.answer.kind !== 'finite');
+  await navigate(`${base}/?seed=${encodeURIComponent(readoutProblem.seed)}&f=a&d=3`, 390, 844);
   await evaluate("document.querySelector('#showMeButton').click()");
   const infinityReadout = await evaluate(`({
     xGuide: Boolean(document.querySelector('.animation-at-infinity-x-guide')),
@@ -370,6 +378,49 @@ try {
   assert(desktop.questionScrollWidth <= desktop.questionClientWidth,
     'The desktop MathML question must fit without a horizontal scrollbar.');
 
+  // Continuity and classification questions are sentences. As one unwrappable block of
+  // MathML they were clipped mid-question in the desktop column, and the answer card hung
+  // far below the question because the graph's height was split across both grid rows.
+  await navigate(`${base}/?seed=desktop-continuity&f=p&q=c&d=3`, 1280, 900);
+  const sentence = await evaluate(`(() => {
+    const heading = document.querySelector('#questionHeading');
+    const question = document.querySelector('.question-strip').getBoundingClientRect();
+    const answer = document.querySelector('.answer-card').getBoundingClientRect();
+    return {
+      scrollWidth: heading.scrollWidth, clientWidth: heading.clientWidth,
+      scrollHeight: heading.scrollHeight, clientHeight: heading.clientHeight,
+      gap: answer.top - question.bottom,
+    };
+  })()`);
+  assert(sentence.scrollWidth <= sentence.clientWidth && sentence.scrollHeight <= sentence.clientHeight,
+    `A continuity question must fit its column without scrolling: ${JSON.stringify(sentence)}`);
+  assert(sentence.gap < 40, `The answer card must sit directly under the question: ${JSON.stringify(sentence)}`);
+
+  // A rejected choice must not be clickable again, or it logs a second misconception.
+  const eliminated = await evaluate(`(() => {
+    const expected = ${JSON.stringify(answerText(generateProblem('desktop-continuity', {
+      families: { point: true, atInfinity: false, limitLaws: false, composition: false },
+      questionTypes: { functionValue: false, oneSided: false, twoSided: false, continuity: true, classification: false },
+      difficulty: 3,
+    }).question.answer))};
+    const wrong = [...document.querySelectorAll('#choiceAnswerArea button')].find((b) => b.dataset.value !== expected);
+    wrong.click();
+    return { disabled: wrong.disabled, marked: wrong.classList.contains('choice-eliminated') };
+  })()`);
+  assert.deepEqual(eliminated, { disabled: true, marked: true }, 'A wrong choice must be ruled out after it is picked.');
+
+  // Every problem rewrites the address bar, so a reload is read as a shared link. The preset
+  // has to survive that, or Practice My Weak Areas silently turns into Custom.
+  await evaluate(`localStorage.setItem('graphicalLimitsTrainer.config.v1', JSON.stringify({
+    preset: 'weakAreas', practiceMode: 'weak', difficulty: 1, haptics: false, reducedMotion: true
+  }))`);
+  await navigate(`${base}/?seed=preset-roundtrip`, 1280, 900);
+  const reloadUrl = await evaluate('location.href');
+  assert(/[?&]p=weakAreas/.test(reloadUrl), `The address bar must carry the preset: ${reloadUrl}`);
+  await navigate(reloadUrl, 1280, 900);
+  assert.equal(await evaluate("document.querySelector('#presetInput').value"), 'weakAreas',
+    'Reloading must keep the Practice My Weak Areas preset.');
+
   await navigate(`${base}/?seed=desktop-law-legend&f=l&d=3`, 1280, 900);
   const desktopLegend = await evaluate(`({
     fontSizes: [...document.querySelectorAll('.graph-function-label, .graph-function-label-g')]
@@ -445,6 +496,87 @@ try {
     assert(atZero.labels.includes('y = 0'),
       `The y = 0 asymptote still needs its label: ${JSON.stringify(atZero)}`);
   }
+
+  // The walkthrough. A first visit without a problem link opens it on its sample problem;
+  // every spotlighted target must stay visible beside the card (or above the phone's bottom
+  // sheet); and finishing it is remembered so it greets each student only once.
+  const tourProblem = generateProblem(TOUR_PROBLEM.seed, TOUR_PROBLEM.config);
+  const tourA = String(tourProblem.scene.a).replace('-', '−');
+  const tourRight = String(tourProblem.scene.right.limit.value).replace('-', '−');
+  const tourValue = String(tourProblem.scene.value).replace('-', '−');
+  await evaluate(`localStorage.setItem('graphicalLimitsTrainer.config.v1', JSON.stringify({ reducedMotion: true, haptics: false }))`);
+  for (const [width, height] of [[390, 844], [1280, 900]]) {
+    await evaluate(`localStorage.removeItem('graphicalLimitsTrainer.tourSeen.v1')`);
+    await navigate(`${base}/`, width, height);
+    const opened = await evaluate(`({
+      open: !document.querySelector('#tourRoot').hidden,
+      search: location.search,
+      question: document.querySelector('#questionHeading').getAttribute('aria-label'),
+      inert: document.querySelector('main').inert && document.querySelector('header').inert,
+    })`);
+    assert(opened.open, `A first visit must open the tour (${width}px).`);
+    assert.equal(opened.search, '', 'The tour sample does not match the saved settings, so it must not be linked.');
+    assert.equal(opened.question, `Find the left-hand limit as x approaches ${tourProblem.scene.a}.`);
+    assert(opened.inert, 'The page behind the tour must be inert.');
+
+    const stepCount = await evaluate("document.querySelectorAll('#tourDots span').length");
+    for (let step = 0; step < stepCount; step += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      const layout = await evaluate(`(() => {
+        const box = (element) => {
+          const r = element.getBoundingClientRect();
+          return { top: r.top, bottom: r.bottom, left: r.left, right: r.right };
+        };
+        const root = document.querySelector('#tourRoot');
+        return {
+          title: document.querySelector('#tourTitle').textContent,
+          centered: root.classList.contains('tour-centered'),
+          spot: box(root.querySelector('.tour-spotlight')),
+          card: box(root.querySelector('.tour-card')),
+          annotations: [...document.querySelectorAll('.tour-annotation')].map((t) => t.textContent),
+          graphText: [...document.querySelectorAll('[data-animation-layer] text')].map((t) => t.textContent),
+          innerWidth, innerHeight,
+        };
+      })()`);
+      const where = `${width}px step ${step + 1} "${layout.title}": ${JSON.stringify(layout)}`;
+      assert(layout.card.left >= -1 && layout.card.right <= layout.innerWidth + 1
+        && layout.card.top >= -1 && layout.card.bottom <= layout.innerHeight + 1, `Tour card off-screen at ${where}`);
+      if (!layout.centered) {
+        if (width > 620) {
+          const overlaps = layout.card.left < layout.spot.right && layout.card.right > layout.spot.left
+            && layout.card.top < layout.spot.bottom && layout.card.bottom > layout.spot.top;
+          assert(!overlaps, `Tour card covers its own target at ${where}`);
+        } else {
+          assert(layout.spot.top >= -1 && layout.spot.top < layout.card.top - 30,
+            `Tour target hidden behind the bottom sheet at ${where}`);
+        }
+      }
+      if (layout.title === 'Filled dots and open circles') {
+        assert(layout.annotations.includes(`filled dot: f(${tourA}) = ${tourValue}`), `Missing filled-dot label at ${where}`);
+        assert.equal(layout.annotations.filter((text) => text === 'open circle').length, 2, `Missing hole labels at ${where}`);
+      }
+      if (layout.title === 'Watch a one-sided limit') {
+        assert(layout.graphText.includes(`As x → ${tourA}⁺, f(x) → ${tourRight}`),
+          `The worked example must end on the right-hand limit at ${where}`);
+      }
+      await evaluate("document.querySelector('#tourNextButton').click()");
+    }
+    const finished = await evaluate(`({
+      open: !document.querySelector('#tourRoot').hidden,
+      inert: document.querySelector('main').inert,
+      annotations: document.querySelectorAll('.tour-annotation').length,
+      seen: localStorage.getItem('graphicalLimitsTrainer.tourSeen.v1'),
+    })`);
+    assert.deepEqual(finished, { open: false, inert: false, annotations: 0, seen: '1' },
+      `Finishing the tour must hand the page back (${width}px).`);
+  }
+  await navigate(`${base}/`, 1280, 900);
+  assert(await evaluate("document.querySelector('#tourRoot').hidden"), 'A returning student must go straight to practice.');
+  await evaluate("document.querySelector('#tourButton').click()");
+  assert(await evaluate("!document.querySelector('#tourRoot').hidden"), 'The ? button must replay the tour.');
+  await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
+  assert(await evaluate("document.querySelector('#tourRoot').hidden && !document.querySelector('main').inert"),
+    'Esc must close the tour.');
 
   const screenshot = await cdp.send('Page.captureScreenshot', { format: 'png' });
   assert(Buffer.from(screenshot.data, 'base64').length > 20000, 'Rendered desktop screenshot appears blank.');

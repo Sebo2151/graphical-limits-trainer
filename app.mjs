@@ -2,6 +2,7 @@ import {
   DEFAULT_CONFIG,
   PRESETS,
   Rational,
+  TOUR_PROBLEM,
   answerText,
   answersEqual,
   choice,
@@ -17,10 +18,12 @@ import {
   questionPrompt as familyQuestionPrompt,
   serializeProblem,
 } from './advanced.mjs';
+import { createTour } from './tour.mjs';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const STORAGE_CONFIG = 'graphicalLimitsTrainer.config.v1';
 const STORAGE_PROGRESS = 'graphicalLimitsTrainer.progress.v1';
+const STORAGE_TOUR = 'graphicalLimitsTrainer.tourSeen.v1';
 
 const elements = {
   graphSvg: document.querySelector('#graphSvg'),
@@ -66,6 +69,10 @@ const elements = {
   replayAnimationButton: document.querySelector('#replayAnimationButton'),
   debugPanel: document.querySelector('#debugPanel'),
   debugOutput: document.querySelector('#debugOutput'),
+  tourButton: document.querySelector('#tourButton'),
+  tourRoot: document.querySelector('#tourRoot'),
+  questionStrip: document.querySelector('.question-strip'),
+  headerActions: document.querySelector('.header-actions'),
 };
 
 let appConfig = loadConfig();
@@ -76,6 +83,8 @@ let firstAttemptRecorded = false;
 let solved = false;
 let showMeUsed = false;
 let replaceMobileAnswer = false;
+let tour = null;
+let tourAnimationFrame = null;
 let animationState = {
   raf: null,
   running: false,
@@ -90,6 +99,7 @@ let animationState = {
 const SINGLE_ANIMATION_DURATION = 5200;
 const TWO_SIDED_ANIMATION_DURATION = 9800;
 const ANIMATION_HOLD = 1400;
+const TOUR_APPROACH_DURATION = 3600;
 
 const margins = { left: 72, right: 34, top: 30, bottom: 55 };
 const viewport = { width: 900, height: 520 };
@@ -110,7 +120,10 @@ function initialize() {
   updateDifficultyDescription();
   const seed = params.get('seed') || randomSeed();
   if (params.get('debug') === '1') elements.debugPanel.hidden = false;
-  startProblem(seed);
+  // A first visit gets the walkthrough. A link to a specific problem does not, because the
+  // tour replaces the problem on screen with its own sample; ?tour=1 asks for it anyway.
+  if (params.get('tour') === '1' || (!params.has('seed') && !tourSeen())) startTour();
+  else startProblem(seed);
 }
 
 function bindEvents() {
@@ -148,6 +161,16 @@ function bindEvents() {
   elements.resetProgressButton.addEventListener('click', resetProgress);
   elements.exportProgressButton.addEventListener('click', exportProgress);
   elements.practiceWeakButton.addEventListener('click', startWeakAreaPractice);
+  elements.tourButton.addEventListener('click', startTour);
+  tour = createTour({
+    root: elements.tourRoot,
+    steps: tourSteps(),
+    reducedMotion: () => appConfig.reducedMotion,
+    // On a phone the question strip is sticky, so anything scrolled beneath it is hidden.
+    obstructionTop: (target) => (isMobileLayout() && !elements.questionStrip.contains(target)
+      ? Math.max(0, elements.questionStrip.getBoundingClientRect().bottom) : 0),
+    onEnd: endTour,
+  });
 
   const mobileQuery = window.matchMedia('(max-width: 620px)');
   mobileQuery.addEventListener?.('change', syncMobileInput);
@@ -155,6 +178,7 @@ function bindEvents() {
 
   window.addEventListener('keydown', (event) => {
     if (!event.altKey || event.key?.toLowerCase() !== 'n') return;
+    if (document.querySelector('dialog[open]') || tour.isActive()) return;
     event.preventDefault();
     startProblem(randomSeed());
   });
@@ -243,10 +267,10 @@ function randomSeed() {
   return `${Date.now().toString(36)}-${bytes[0].toString(36)}${bytes[1].toString(36)}`;
 }
 
-function startProblem(seed) {
+function startProblem(seed, { config = appConfig, syncUrl = true } = {}) {
   stopAnimation();
-  const targetSkill = appConfig.practiceMode === 'weak' ? chooseWeakSkill(seed) : null;
-  problem = generateProblem(seed, { ...appConfig, targetSkill });
+  const targetSkill = config.practiceMode === 'weak' ? chooseWeakSkill(seed) : null;
+  problem = generateProblem(seed, { ...config, targetSkill });
   wrongAttempts = 0;
   firstAttemptRecorded = false;
   solved = false;
@@ -274,7 +298,11 @@ function startProblem(seed) {
   renderQuestion(problem.question);
   updateDebugPanel();
 
-  updateUrl(seed);
+  // The address bar describes the saved settings. A problem generated from other settings,
+  // such as the tour's sample, clears it rather than advertising a link that would
+  // reproduce something else.
+  if (syncUrl) updateUrl(seed);
+  else history.replaceState(null, '', location.pathname);
 
   if (problem.question.inputMode === 'limit' && !isMobileLayout()) {
     requestAnimationFrame(() => elements.answerInput.focus({ preventScroll: true }));
@@ -300,7 +328,7 @@ function renderQuestion(question) {
       button.type = 'button';
       button.textContent = item.label;
       button.dataset.value = item.value;
-      button.addEventListener('click', () => submitChoice(item.value));
+      button.addEventListener('click', () => submitChoice(item.value, button));
       elements.choiceAnswerArea.append(button);
     });
   }
@@ -339,11 +367,13 @@ function questionMathML(question) {
   }
   const fAtA = `<math display="block"><mi>f</mi><mo>(</mo>${a}<mo>)</mo>${unknownTail}</math>`;
   if (question.type === 'functionValue') return fAtA;
+  // These are sentences, not formulas. A single block of MathML cannot wrap, so in the
+  // narrow desktop question column it was clipped behind a scrollbar mid-question.
   if (question.type === 'continuity') {
-    return `<math display="block"><mtext>Is</mtext><mspace width="0.35em"/><mi>f</mi><mspace width="0.35em"/><mtext>continuous at</mtext><mspace width="0.35em"/><mrow class="question-tail"><mi>x</mi><mo>=</mo>${a}<mo>?</mo></mrow></math>`;
+    return `Is <math><mi>f</mi></math> continuous at <span class="question-tail"><math><mi>x</mi><mo>=</mo>${a}</math>?</span>`;
   }
   if (question.type === 'classification') {
-    return `<math display="block"><mtext>Classify</mtext><mspace width="0.35em"/><mi>f</mi><mspace width="0.35em"/><mtext>at</mtext><mspace width="0.35em"/><mi>x</mi><mo>=</mo>${a}<mo>.</mo></math>`;
+    return `Classify <math><mi>f</mi></math> at <span class="question-tail"><math><mi>x</mi><mo>=</mo>${a}</math>.</span>`;
   }
 
   let approach = a;
@@ -383,9 +413,15 @@ function handleLimitSubmit(event) {
   evaluateSubmission(submitted);
 }
 
-function submitChoice(value) {
+function submitChoice(value, button) {
   if (solved || problem.question.inputMode !== 'choice') return;
   evaluateSubmission(choice(value));
+  // A rejected choice stays visibly ruled out, so it cannot be clicked again and logged as
+  // a second misconception.
+  if (!solved && button) {
+    button.disabled = true;
+    button.classList.add('choice-eliminated');
+  }
 }
 
 function evaluateSubmission(submitted) {
@@ -409,13 +445,15 @@ function evaluateSubmission(submitted) {
   const diagnosis = diagnoseSubmission(problem, submitted);
   recordMisconception(diagnosis.misconception);
   const message = diagnosis.message || diagnoseWrongAnswer(problem, submitted);
-  const extension = wrongAttempts >= 2 ? ' Show me can trace the reasoning step by step.' : '';
+  const extension = wrongAttempts >= 2 && !showMeUsed ? ' Show me can trace the reasoning step by step.' : '';
   showFeedback('incorrect', wrongAttempts === 1 ? 'Not quite' : 'Try tracing the approach', `${message}${extension}`);
   vibrate('incorrect');
   pulseAnswerArea('incorrect');
   revealFeedback();
 
-  if (wrongAttempts >= 2) {
+  // Once Show me has run, its animation owns the graph and the pause/replay controls.
+  // Swapping in the static hint here hid those controls while the animation kept drawing.
+  if (wrongAttempts >= 2 && !showMeUsed) {
     elements.animationControls.hidden = false;
     elements.showMeButton.hidden = false;
     elements.animationToggleButton.hidden = true;
@@ -1103,7 +1141,10 @@ function directionArrow(side) {
   group.append(svgElement('line', {
     x1: mapX(start), y1: y, x2: mapX(end), y2: y,
     class: side === 'left' ? 'animation-guide-left' : 'animation-guide-right',
-    'marker-end': 'url(#none)',
+  }));
+  group.append(svgElement('path', {
+    d: arrowheadPath(mapX(end), y, mapX(start), y),
+    class: side === 'left' ? 'animation-point-left' : 'animation-point-right',
   }));
   group.append(svgElement('text', {
     x: (mapX(start) + mapX(end)) / 2,
@@ -1492,9 +1533,11 @@ function renderFunctionValueExplanation(layer, progressValue) {
     layer.append(svgElement('circle', { cx: x, cy: y, r: 15 + 4 * Math.sin(progressValue * Math.PI), class: 'animation-target' }));
     layer.append(svgElement('line', { x1: x, y1: mapY(0), x2: x, y2: y, class: 'animation-guide-right' }));
   } else {
+    // With two infinite branches there is no open circle to point at, only an asymptote.
     const finiteBranch = [scene.left, scene.right].find((branch) => branch.limit.kind === 'finite');
     const y = finiteBranch ? mapY(finiteBranch.limit.value.toNumber()) : mapY(0);
-    layer.append(svgElement('text', { x, y: y - 20, 'text-anchor': 'middle', class: 'animation-label' }, 'open, not filled'));
+    layer.append(svgElement('text', { x, y: y - 20, 'text-anchor': 'middle', class: 'animation-label' },
+      finiteBranch ? 'open, not filled' : 'no filled point'));
   }
 }
 
@@ -1587,7 +1630,10 @@ function renderApproach(layer, side, progressValue, scene = problem.scene) {
 }
 
 function renderAnswerBanner(layer) {
-  const text = answerBannerText();
+  renderBanner(layer, answerBannerText());
+}
+
+function renderBanner(layer, text) {
   const width = Math.min(620, 170 + text.length * 8.2);
   const x = (viewport.width - width) / 2;
   const y = margins.top + 10;
@@ -1602,6 +1648,177 @@ function answerBannerText() {
   if (problem.question.type === 'continuity') return `Continuous? ${answer === 'yes' ? 'Yes' : 'No'}`;
   if (problem.question.type === 'classification') return classificationLabel(problem.question.answer.value);
   return `Answer: ${answer}`;
+}
+
+function tourSeen() {
+  try {
+    return localStorage.getItem(STORAGE_TOUR) === '1';
+  } catch {
+    // Without storage the tour could not remember being dismissed, and would greet the
+    // student on every visit. The ? button still offers it.
+    return true;
+  }
+}
+
+function startTour() {
+  try {
+    localStorage.setItem(STORAGE_TOUR, '1');
+  } catch {
+    // Remembering the tour is a convenience; the tour itself still runs.
+  }
+  startProblem(TOUR_PROBLEM.seed, { config: TOUR_PROBLEM.config, syncUrl: false });
+  tour.start();
+}
+
+function endTour(reason) {
+  if (reason !== 'completed') {
+    elements.tourButton.focus({ preventScroll: true });
+    return;
+  }
+  // The last step hands the sample problem over, so put the student where they answer it.
+  scrollToProblemStart();
+  if (!isMobileLayout()) elements.answerInput.focus({ preventScroll: true });
+}
+
+// The tour's text is written against the sample scene, so its numbers are read from that
+// scene rather than typed into the prose.
+function tourSteps() {
+  const scene = () => problem.scene;
+  const show = (value) => String(value).replace('-', '−');
+  const limitMath = (sign) => `<math displaystyle="true"><munder><mo movablelimits="true">lim</mo><mrow><mi>x</mi><mo>→</mo><msup>${rationalMathML(scene().a)}<mo>${sign}</mo></msup></mrow></munder><mi>f</mi><mo stretchy="false">(</mo><mi>x</mi><mo stretchy="false">)</mo></math>`;
+  const graphFrame = () => elements.graphPanels.querySelector('.graph-frame');
+  return [
+    {
+      title: 'Welcome!',
+      nextLabel: 'Start the tour',
+      body: () => `<p>Every question in this trainer is answered by reading a graph. This short tour works
+        through part of a sample problem with you, then hands you the rest.</p>
+        <p>It takes about a minute. The arrow keys move between steps, and Esc closes the tour.</p>`,
+    },
+    {
+      target: () => elements.questionStrip,
+      title: 'Start with the question',
+      body: () => `<p>This question asks for ${limitMath('−')}: the limit of <i>f</i>(<i>x</i>) as <i>x</i>
+        approaches ${show(scene().a)} <strong>from the left</strong>.</p>
+        <p>The small minus sign means <i>x</i> stays below ${show(scene().a)}. A plus sign would mean
+        from the right, and no sign means from both sides.</p>`,
+    },
+    {
+      target: graphFrame,
+      title: 'Filled dots and open circles',
+      onEnter: annotateTourMarkers,
+      onLeave: clearAnimationLayers,
+      body: () => `<p>A <strong>filled dot</strong> is a point on the graph. This one says
+        <i>f</i>(${show(scene().a)}) = ${show(scene().value)}.</p>
+        <p>An <strong>open circle</strong> is a hole. The curve gets arbitrarily close to it, but the
+        point itself is not on the graph.</p>`,
+    },
+    {
+      target: graphFrame,
+      title: 'Watch a one-sided limit',
+      onEnter: playTourApproach,
+      onLeave: stopTourApproach,
+      body: () => `<p>Here <i>x</i> approaches ${show(scene().a)} from the right. As the dot slides along
+        the curve, its height approaches <strong>${show(scene().right.limit.value)}</strong>, so
+        ${limitMath('+')} = ${show(scene().right.limit.value)}.</p>
+        <p>The filled dot at ${show(scene().value)} plays no part. A limit depends on the values
+        <em>near</em> x = ${show(scene().a)}, not the value <em>at</em> x = ${show(scene().a)}.</p>`,
+    },
+    {
+      target: () => elements.limitAnswerArea,
+      title: 'Entering answers',
+      body: () => `<p>${isMobileLayout()
+        ? 'Use the keypad for integers, decimals, and fractions such as 3/2.'
+        : 'Type an integer, a decimal, or a fraction such as 3/2.'}</p>
+        <p>If the y-values increase or decrease without bound, choose <span class="tour-key">+∞</span> or
+        <span class="tour-key">−∞</span>. If no limit exists, choose <span class="tour-key">DNE</span>.</p>`,
+    },
+    {
+      target: () => elements.showMeButton,
+      title: 'Stuck? Ask for help',
+      body: () => `<p><span class="tour-key">Show me</span> animates the reasoning step by step, and you
+        can use it any time.</p>
+        <p>A problem you finish after using it is recorded as <em>completed with help</em>, so your
+        progress record stays accurate.</p>`,
+    },
+    {
+      target: () => elements.headerActions,
+      title: 'Choose what to practice',
+      body: () => `<p><span class="tour-key">Options</span> lets you choose a topic and a difficulty
+        level: one-sided limits, continuity, limits at infinity, limit laws, composition, or an Exam 1 mix.</p>
+        <p><span class="tour-key">Progress</span> shows your strong and weak skills. It is saved only in
+        this browser. Press <span class="tour-key">?</span> to see this tour again.</p>`,
+    },
+    {
+      target: () => elements.questionStrip,
+      title: 'Your turn',
+      nextLabel: 'Let’s go',
+      body: () => `<p>The limit from the right was ${show(scene().right.limit.value)}. Now find
+        <span class="tour-nowrap">${limitMath('−')}.</span></p>
+        <p>Follow the left branch toward x = ${show(scene().a)}.</p>`,
+    },
+  ];
+}
+
+// Rings and labels on the sample's three markers. Each label goes on the side of x = a
+// that the marker's own branch does not occupy, so no label is drawn over the curve.
+function annotateTourMarkers() {
+  const layer = animationLayer('f');
+  if (!layer) return;
+  layer.replaceChildren();
+  const scene = problem.scene;
+  const x = mapX(scene.aNumber);
+  const show = (value) => String(value).replace('-', '−');
+  const left = scene.left.limit.value;
+  const right = scene.right.limit.value;
+  const note = (value, side, text, className) => {
+    const y = mapY(value.toNumber());
+    layer.append(svgElement('circle', { cx: x, cy: y, r: 16, class: 'animation-target' }));
+    layer.append(svgElement('text', {
+      x: side === 'right' ? x + 26 : x - 26, y: y + 7,
+      'text-anchor': side === 'right' ? 'start' : 'end',
+      class: `tour-annotation ${className}`,
+    }, text));
+  };
+  const filledSide = Math.abs(scene.value.sub(right).toNumber()) > Math.abs(scene.value.sub(left).toNumber())
+    ? 'right' : 'left';
+  note(scene.value, filledSide, `filled dot: f(${show(scene.a)}) = ${show(scene.value)}`, '');
+  note(left, 'right', 'open circle', 'tour-annotation-open');
+  note(right, 'left', 'open circle', 'tour-annotation-open');
+}
+
+function playTourApproach() {
+  stopTourApproach();
+  const layer = animationLayer('f');
+  if (!layer) return;
+  const scene = problem.scene;
+  const show = (value) => String(value).replace('-', '−');
+  const draw = (progressValue) => {
+    layer.replaceChildren();
+    const aX = mapX(scene.aNumber);
+    layer.append(svgElement('line', {
+      x1: aX, y1: margins.top, x2: aX, y2: viewport.height - margins.bottom, class: 'animation-focus',
+    }));
+    renderApproach(layer, 'right', progressValue);
+    if (progressValue >= 0.8) renderBanner(layer, `As x → ${show(scene.a)}⁺, f(x) → ${show(scene.right.limit.value)}`);
+  };
+  if (appConfig.reducedMotion) {
+    draw(1);
+    return;
+  }
+  const started = performance.now();
+  const tick = (now) => {
+    const elapsed = (now - started) % (TOUR_APPROACH_DURATION + ANIMATION_HOLD);
+    draw(Math.min(1, elapsed / TOUR_APPROACH_DURATION));
+    tourAnimationFrame = requestAnimationFrame(tick);
+  };
+  tourAnimationFrame = requestAnimationFrame(tick);
+}
+
+function stopTourApproach() {
+  if (tourAnimationFrame) cancelAnimationFrame(tourAnimationFrame);
+  tourAnimationFrame = null;
+  clearAnimationLayers();
 }
 
 function populateOptionsForm() {
@@ -1875,9 +2092,14 @@ function configFromUrl(params, fallback) {
   for (const code of q || '') if (questionCodes[code]) questionTypes[questionCodes[code]] = true;
   for (const code of g || '') if (featureCodes[code]) features[featureCodes[code]] = true;
   for (const code of f || '') if (familyCodes[code]) families[familyCodes[code]] = true;
+  // Every problem rewrites the address bar, so a plain reload arrives here too. Without the
+  // preset it came back as Custom, and Practice My Weak Areas silently stopped targeting.
+  const preset = PRESETS[params.get('p')] ? params.get('p') : 'custom';
 
   return {
     ...normalizeConfig({
+      preset,
+      practiceMode: PRESETS[preset]?.practiceMode === 'weak' ? 'weak' : 'mixed',
       difficulty: Number(params.get('d') || fallback.difficulty),
       questionTypes: q ? questionTypes : fallback.questionTypes,
       features: g ? features : fallback.features,
@@ -1906,6 +2128,8 @@ function problemUrl(seed) {
   url.searchParams.set('q', q);
   url.searchParams.set('g', g);
   url.searchParams.set('f', f);
+  if (PRESETS[appConfig.preset]) url.searchParams.set('p', appConfig.preset);
+  else url.searchParams.delete('p');
   return url;
 }
 

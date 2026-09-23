@@ -24,6 +24,7 @@ import {
   normalizeConfig as normalizeAdvancedConfig,
   parseLimitAnswer as advancedParseLimitAnswer,
   serializeProblem as serializeAdvancedProblem,
+  TOUR_PROBLEM,
 } from './advanced.mjs';
 
 const CLASSIFICATIONS = ['continuous', 'removable', 'jump', 'infinite', 'oscillatory'];
@@ -403,6 +404,15 @@ function testAdvancedFamilies() {
           assert.equal(problem.scene.breakpoint.rightY, problem.scene.right.eval(0));
           assert(Math.abs(problem.scene.breakpoint.leftY) <= 5.4);
           assert(Math.abs(problem.scene.breakpoint.rightY) <= 5.4);
+          // An unbounded end must visibly leave the plot. A branch still inside the window
+          // at the edge looks like it is leveling off toward a finite value.
+          for (const side of ['left', 'right']) {
+            const limit = problem.scene.endLimits[side];
+            if (limit.kind !== 'posInf' && limit.kind !== 'negInf') continue;
+            const edge = problem.scene[side].eval(side === 'left' ? problem.scene.xRange.min : problem.scene.xRange.max);
+            assert(Math.abs(edge) > problem.scene.yRange.max,
+              `An unbounded end limit must leave the plot before its edge (${seed}, ${side}: y = ${edge.toFixed(2)}).`);
+          }
         }
 
         if (family === 'limitLaws') {
@@ -547,6 +557,54 @@ function testAdvancedExplanationLanguage() {
   }
 }
 
+// Wrong-answer feedback for composition has to match the case on screen. The direct case,
+// the most common one at introductory difficulty, used to be told that "the inner limit
+// need not exist" while its inner limit plainly did.
+function testCompositionFeedback() {
+  const cases = new Set();
+  for (let difficulty = 1; difficulty <= 3; difficulty += 1) {
+    for (let i = 0; i < 400; i += 1) {
+      const problem = generateAdvancedProblem(`compfeedback-${difficulty}-${i}`, familyConfig('composition', difficulty));
+      const { caseType, outerInput, answer } = problem.question;
+      cases.add(caseType);
+      const miss = answer.kind === 'finite' && answer.value.equals(new Rational(99)) ? new Rational(98) : new Rational(99);
+      const wrong = diagnoseSubmission(problem, { kind: 'finite', value: miss });
+      if (caseType !== 'innerDneOuterExists') {
+        assert(!/need not exist/.test(wrong.message),
+          `A composition whose inner limit exists was told it need not: ${wrong.message}`);
+      }
+      if (caseType !== 'innerDneOuterExists' && !(answer.kind === 'finite' && answer.value.equals(outerInput))) {
+        const swapped = diagnoseSubmission(problem, { kind: 'finite', value: outerInput });
+        assert.equal(swapped.misconception, 'inner-outer-swap',
+          `Answering g's limit instead of f's must be named as an inner/outer swap (${caseType}).`);
+      }
+    }
+  }
+  assert(cases.has('direct'), 'Expected the direct composition case.');
+}
+
+// The walkthrough narrates its sample graph: a filled dot that matches neither one-sided
+// limit, a right-hand limit worked as the example, and a left-hand limit left for the
+// student. A generator change that alters this scene would leave the narration wrong.
+function testTourProblem() {
+  const problem = generateAdvancedProblem(TOUR_PROBLEM.seed, TOUR_PROBLEM.config);
+  const { scene, question } = problem;
+  assert.equal(problem.family, 'point');
+  assert.equal(question.type, 'leftLimit', 'The tour hands the student the left-hand limit.');
+  assert.equal(scene.left.kind, 'polynomial');
+  assert.equal(scene.right.kind, 'polynomial');
+  assert(scene.value !== null, 'The tour points at a filled dot.');
+  const left = scene.left.limit.value;
+  const right = scene.right.limit.value;
+  assert(!scene.value.equals(left) && !scene.value.equals(right),
+    'The filled dot must match neither one-sided limit, so the tour can show a limit ignores f(a).');
+  for (const [p, q] of [[left, right], [left, scene.value], [right, scene.value]]) {
+    assert(Math.abs(p.toNumber() - q.toNumber()) >= 2, 'The three markers need room for their labels.');
+  }
+  assert.equal(scene.distractors.length, 0, 'Extra holes would confuse the tour\'s marker labels.');
+  assert(scene.left.slope > 0, 'The left branch must rise into its open circle, clear of the labels to its right.');
+}
+
 function testInterfaceRegressions() {
   const html = readFileSync(new URL('./index.html', import.meta.url), 'utf8');
   const css = readFileSync(new URL('./styles.css', import.meta.url), 'utf8');
@@ -629,5 +687,7 @@ testTwoSidedInfinityConvention();
 testAdvancedFamilies();
 testAdvancedParserMatchesCore();
 testAdvancedExplanationLanguage();
+testCompositionFeedback();
+testTourProblem();
 testInterfaceRegressions();
 console.log('All semantic generator tests passed.');

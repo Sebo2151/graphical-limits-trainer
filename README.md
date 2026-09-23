@@ -19,6 +19,7 @@ Every question is answerable from the graphs on screen. There is deliberately no
 
 ## Teaching and progress
 
+- A one-minute guided tour on the first visit works through a sample graph with the student: filled dots versus open circles, an animated one-sided limit, answer entry, and Show Me. It then hands them the matching one-sided limit to find on their own. The `?` button replays it, and instructors can link straight to it with `?tour=1`
 - Exact rational grading for integers, decimals, and fractions
 - Dedicated `DNE`, positive-infinity, and negative-infinity controls
 - Targeted feedback and persistent misconception tracking
@@ -96,7 +97,7 @@ Run automated browser and mobile checks with:
 node browser-tests.mjs
 ```
 
-This dependency-free runner uses an installed Chrome or Edge browser through the DevTools protocol. It checks true 390px layout geometry, horizontal overflow, composition stacking, shared limit-law axes, mobile keyboard suppression, immediate Show Me animation, assisted-credit persistence, desktop columns, and a nonblank rendered screenshot. If no supported browser is installed, it reports a skip.
+This dependency-free runner uses an installed Chrome or Edge browser through the DevTools protocol. It checks true 390px layout geometry, horizontal overflow, composition stacking, shared limit-law axes, mobile keyboard suppression, immediate Show Me animation, assisted-credit persistence, desktop columns, the guided tour at phone and desktop sizes, and a nonblank rendered screenshot. If no supported browser is installed, it reports a skip.
 
 Open `tests.html` through the local server for lightweight in-browser smoke tests.
 
@@ -106,7 +107,8 @@ Open `tests.html` through the local server for lightweight in-browser smoke test
 - `styles.css` - responsive layout and SVG styling
 - `core.mjs` - exact arithmetic and the finite-point semantic generator
 - `advanced.mjs` - family orchestration, limits at infinity, limit laws, composition, presets, grading, and feedback
-- `app.mjs` - rendering, animation, interaction, storage, adaptive practice, and progress UI
+- `app.mjs` - rendering, animation, interaction, storage, adaptive practice, progress UI, and the tour's steps
+- `tour.mjs` - the guided-tour engine: spotlight, card placement, keyboard handling, and focus
 - `tests.mjs` - Node semantic and invariant tests
 - `browser-tests.mjs` - automated desktop/mobile browser regressions
 - `tests.html` - browser smoke tests

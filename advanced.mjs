@@ -78,6 +78,20 @@ export const PRESETS = Object.freeze({
   },
 });
 
+// The walkthrough's sample problem: a jump at x = 2 whose filled point matches neither
+// one-sided limit, so the tour can show that a limit ignores f(a). The tour's wording reads
+// these values from the scene, and tests.mjs pins them, because any change to the generator
+// could silently turn this into a graph the walkthrough no longer describes.
+export const TOUR_PROBLEM = Object.freeze({
+  seed: 'tour-33',
+  config: Object.freeze({
+    difficulty: 1,
+    families: { point: true, atInfinity: false, limitLaws: false, composition: false },
+    questionTypes: { functionValue: false, oneSided: true, twoSided: false, continuity: false, classification: false },
+    features: { continuous: false, removable: false, jump: true, infinite: false, oscillatory: false },
+  }),
+});
+
 export const DEFAULT_CONFIG = Object.freeze({
   ...POINT_DEFAULT_CONFIG,
   preset: 'examReview',
@@ -258,7 +272,11 @@ function endBranch(side, rng, difficulty, requestedLimit = null) {
       const distance = Math.abs(x) + 1;
       if (limit.kind === 'finite') return limit.value.toNumber() + amplitude / distance;
       const sign = limit.kind === 'posInf' ? 1 : -1;
-      return sign * (0.16 * distance ** power + Math.abs(amplitude) * 0.3);
+      // At 0.16 a linear branch rose barely a unit across the half-plot and ended near
+      // y = 2, which reads as leveling off rather than growing without bound. 0.75 carries
+      // every line out of the window before the plot edge while keeping f(0) small.
+      const growth = power === 1 ? 0.75 : 0.16;
+      return sign * (growth * distance ** power + Math.abs(amplitude) * 0.3);
     },
   };
 }
@@ -524,6 +542,15 @@ export function diagnoseSubmission(problem, submitted) {
     return { misconception: 'infinity-vs-dne', message: 'The values grow without bound in one consistent direction, so the infinity sign carries information that DNE would discard.' };
   }
   if (problem.question.type === 'composition') {
+    const { caseType, outerInput } = problem.question;
+    // outerInput is only meaningful when g has a limit; in the innerDneOuterExists case it
+    // is an unused draw, so matching it there would be a coincidence, not a swap.
+    if (caseType !== 'innerDneOuterExists' && submitted.kind === 'finite' && submitted.value.equals(outerInput)) {
+      return { misconception: 'inner-outer-swap', message: `That is where g(x) is heading: ${outerInput} is the input g sends to f. The question asks for the output, so read f near x = ${outerInput}.` };
+    }
+    if (caseType === 'direct') {
+      return { misconception: 'direct-substitution', message: `g(x) approaches ${outerInput} from both sides, and f has no break there. Read the height of f at x = ${outerInput}.` };
+    }
     if (problem.question.innerDirection === 'left' || problem.question.innerDirection === 'right') {
       return { misconception: 'composition-direction', message: `Although g(x) tends to ${problem.question.outerInput}, it approaches that input from the ${problem.question.innerDirection}. Read that one-sided behavior on f.` };
     }
