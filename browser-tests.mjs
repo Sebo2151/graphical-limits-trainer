@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { answerText, generateProblem } from './advanced.mjs';
+import { TOUR_PROBLEM, answerText, generateProblem } from './advanced.mjs';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const browserCandidates = process.platform === 'win32'
@@ -488,6 +488,87 @@ try {
     assert(atZero.labels.includes('y = 0'),
       `The y = 0 asymptote still needs its label: ${JSON.stringify(atZero)}`);
   }
+
+  // The walkthrough. A first visit without a problem link opens it on its sample problem;
+  // every spotlighted target must stay visible beside the card (or above the phone's bottom
+  // sheet); and finishing it is remembered so it greets each student only once.
+  const tourProblem = generateProblem(TOUR_PROBLEM.seed, TOUR_PROBLEM.config);
+  const tourA = String(tourProblem.scene.a).replace('-', '−');
+  const tourRight = String(tourProblem.scene.right.limit.value).replace('-', '−');
+  const tourValue = String(tourProblem.scene.value).replace('-', '−');
+  await evaluate(`localStorage.setItem('graphicalLimitsTrainer.config.v1', JSON.stringify({ reducedMotion: true, haptics: false }))`);
+  for (const [width, height] of [[390, 844], [1280, 900]]) {
+    await evaluate(`localStorage.removeItem('graphicalLimitsTrainer.tourSeen.v1')`);
+    await navigate(`${base}/`, width, height);
+    const opened = await evaluate(`({
+      open: !document.querySelector('#tourRoot').hidden,
+      search: location.search,
+      question: document.querySelector('#questionHeading').getAttribute('aria-label'),
+      inert: document.querySelector('main').inert && document.querySelector('header').inert,
+    })`);
+    assert(opened.open, `A first visit must open the tour (${width}px).`);
+    assert.equal(opened.search, '', 'The tour sample does not match the saved settings, so it must not be linked.');
+    assert.equal(opened.question, `Find the left-hand limit as x approaches ${tourProblem.scene.a}.`);
+    assert(opened.inert, 'The page behind the tour must be inert.');
+
+    const stepCount = await evaluate("document.querySelectorAll('#tourDots span').length");
+    for (let step = 0; step < stepCount; step += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      const layout = await evaluate(`(() => {
+        const box = (element) => {
+          const r = element.getBoundingClientRect();
+          return { top: r.top, bottom: r.bottom, left: r.left, right: r.right };
+        };
+        const root = document.querySelector('#tourRoot');
+        return {
+          title: document.querySelector('#tourTitle').textContent,
+          centered: root.classList.contains('tour-centered'),
+          spot: box(root.querySelector('.tour-spotlight')),
+          card: box(root.querySelector('.tour-card')),
+          annotations: [...document.querySelectorAll('.tour-annotation')].map((t) => t.textContent),
+          graphText: [...document.querySelectorAll('[data-animation-layer] text')].map((t) => t.textContent),
+          innerWidth, innerHeight,
+        };
+      })()`);
+      const where = `${width}px step ${step + 1} "${layout.title}": ${JSON.stringify(layout)}`;
+      assert(layout.card.left >= -1 && layout.card.right <= layout.innerWidth + 1
+        && layout.card.top >= -1 && layout.card.bottom <= layout.innerHeight + 1, `Tour card off-screen at ${where}`);
+      if (!layout.centered) {
+        if (width > 620) {
+          const overlaps = layout.card.left < layout.spot.right && layout.card.right > layout.spot.left
+            && layout.card.top < layout.spot.bottom && layout.card.bottom > layout.spot.top;
+          assert(!overlaps, `Tour card covers its own target at ${where}`);
+        } else {
+          assert(layout.spot.top >= -1 && layout.spot.top < layout.card.top - 30,
+            `Tour target hidden behind the bottom sheet at ${where}`);
+        }
+      }
+      if (layout.title === 'Filled dots and open circles') {
+        assert(layout.annotations.includes(`filled dot: f(${tourA}) = ${tourValue}`), `Missing filled-dot label at ${where}`);
+        assert.equal(layout.annotations.filter((text) => text === 'open circle').length, 2, `Missing hole labels at ${where}`);
+      }
+      if (layout.title === 'Watch a one-sided limit') {
+        assert(layout.graphText.includes(`As x → ${tourA}⁺, f(x) → ${tourRight}`),
+          `The worked example must end on the right-hand limit at ${where}`);
+      }
+      await evaluate("document.querySelector('#tourNextButton').click()");
+    }
+    const finished = await evaluate(`({
+      open: !document.querySelector('#tourRoot').hidden,
+      inert: document.querySelector('main').inert,
+      annotations: document.querySelectorAll('.tour-annotation').length,
+      seen: localStorage.getItem('graphicalLimitsTrainer.tourSeen.v1'),
+    })`);
+    assert.deepEqual(finished, { open: false, inert: false, annotations: 0, seen: '1' },
+      `Finishing the tour must hand the page back (${width}px).`);
+  }
+  await navigate(`${base}/`, 1280, 900);
+  assert(await evaluate("document.querySelector('#tourRoot').hidden"), 'A returning student must go straight to practice.');
+  await evaluate("document.querySelector('#tourButton').click()");
+  assert(await evaluate("!document.querySelector('#tourRoot').hidden"), 'The ? button must replay the tour.');
+  await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
+  assert(await evaluate("document.querySelector('#tourRoot').hidden && !document.querySelector('main').inert"),
+    'Esc must close the tour.');
 
   const screenshot = await cdp.send('Page.captureScreenshot', { format: 'png' });
   assert(Buffer.from(screenshot.data, 'base64').length > 20000, 'Rendered desktop screenshot appears blank.');

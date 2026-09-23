@@ -24,6 +24,7 @@ import {
   normalizeConfig as normalizeAdvancedConfig,
   parseLimitAnswer as advancedParseLimitAnswer,
   serializeProblem as serializeAdvancedProblem,
+  TOUR_PROBLEM,
 } from './advanced.mjs';
 
 const CLASSIFICATIONS = ['continuous', 'removable', 'jump', 'infinite', 'oscillatory'];
@@ -573,6 +574,28 @@ function testCompositionFeedback() {
   assert(cases.has('direct'), 'Expected the direct composition case.');
 }
 
+// The walkthrough narrates its sample graph: a filled dot that matches neither one-sided
+// limit, a right-hand limit worked as the example, and a left-hand limit left for the
+// student. A generator change that alters this scene would leave the narration wrong.
+function testTourProblem() {
+  const problem = generateAdvancedProblem(TOUR_PROBLEM.seed, TOUR_PROBLEM.config);
+  const { scene, question } = problem;
+  assert.equal(problem.family, 'point');
+  assert.equal(question.type, 'leftLimit', 'The tour hands the student the left-hand limit.');
+  assert.equal(scene.left.kind, 'polynomial');
+  assert.equal(scene.right.kind, 'polynomial');
+  assert(scene.value !== null, 'The tour points at a filled dot.');
+  const left = scene.left.limit.value;
+  const right = scene.right.limit.value;
+  assert(!scene.value.equals(left) && !scene.value.equals(right),
+    'The filled dot must match neither one-sided limit, so the tour can show a limit ignores f(a).');
+  for (const [p, q] of [[left, right], [left, scene.value], [right, scene.value]]) {
+    assert(Math.abs(p.toNumber() - q.toNumber()) >= 2, 'The three markers need room for their labels.');
+  }
+  assert.equal(scene.distractors.length, 0, 'Extra holes would confuse the tour\'s marker labels.');
+  assert(scene.left.slope > 0, 'The left branch must rise into its open circle, clear of the labels to its right.');
+}
+
 function testInterfaceRegressions() {
   const html = readFileSync(new URL('./index.html', import.meta.url), 'utf8');
   const css = readFileSync(new URL('./styles.css', import.meta.url), 'utf8');
@@ -656,5 +679,6 @@ testAdvancedFamilies();
 testAdvancedParserMatchesCore();
 testAdvancedExplanationLanguage();
 testCompositionFeedback();
+testTourProblem();
 testInterfaceRegressions();
 console.log('All semantic generator tests passed.');

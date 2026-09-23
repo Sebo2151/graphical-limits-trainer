@@ -78,6 +78,20 @@ export const PRESETS = Object.freeze({
   },
 });
 
+// The walkthrough's sample problem: a jump at x = 2 whose filled point matches neither
+// one-sided limit, so the tour can show that a limit ignores f(a). The tour's wording reads
+// these values from the scene, and tests.mjs pins them, because any change to the generator
+// could silently turn this into a graph the walkthrough no longer describes.
+export const TOUR_PROBLEM = Object.freeze({
+  seed: 'tour-33',
+  config: Object.freeze({
+    difficulty: 1,
+    families: { point: true, atInfinity: false, limitLaws: false, composition: false },
+    questionTypes: { functionValue: false, oneSided: true, twoSided: false, continuity: false, classification: false },
+    features: { continuous: false, removable: false, jump: true, infinite: false, oscillatory: false },
+  }),
+});
+
 export const DEFAULT_CONFIG = Object.freeze({
   ...POINT_DEFAULT_CONFIG,
   preset: 'examReview',

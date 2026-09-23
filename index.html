@@ -8,19 +8,20 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <header class="app-header">
+  <header class="app-header" data-tour-inert>
     <div>
       <p class="eyebrow">Calculus I practice</p>
       <h1>Graphical Limits Trainer</h1>
     </div>
     <nav class="header-actions" aria-label="App controls">
+      <button id="tourButton" class="secondary-button tour-button" type="button" aria-label="Take the tour" title="Take the tour">?</button>
       <button id="progressButton" class="secondary-button" type="button">Progress</button>
       <button id="optionsButton" class="secondary-button" type="button">Options</button>
       <button id="newProblemButton" class="primary-button" type="button">New problem</button>
     </nav>
   </header>
 
-  <main class="app-shell">
+  <main class="app-shell" data-tour-inert>
     <section class="question-strip" aria-labelledby="questionHeading">
       <p class="question-label">Question</p>
       <h2 id="questionHeading" class="question-math"></h2>
@@ -221,6 +222,23 @@
       <button id="resetProgressButton" class="danger-button" type="button">Reset progress</button>
     </div>
   </dialog>
+
+  <div id="tourRoot" class="tour-root" hidden>
+    <div class="tour-spotlight" aria-hidden="true"></div>
+    <div class="tour-card" role="dialog" aria-modal="true" aria-labelledby="tourTitle" aria-describedby="tourBody">
+      <div class="tour-progress">
+        <p id="tourStepCount" class="eyebrow tour-step-count"></p>
+        <div id="tourDots" class="tour-dots" aria-hidden="true"></div>
+      </div>
+      <h2 id="tourTitle"></h2>
+      <div id="tourBody" class="tour-body"></div>
+      <div class="tour-actions">
+        <button id="tourSkipButton" class="text-button" type="button">Skip tour</button>
+        <button id="tourBackButton" class="secondary-button" type="button">Back</button>
+        <button id="tourNextButton" class="primary-button" type="button">Next</button>
+      </div>
+    </div>
+  </div>
 
   <script type="module" src="app.mjs"></script>
 </body>

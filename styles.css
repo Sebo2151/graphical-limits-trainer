@@ -387,6 +387,55 @@ label { font-weight: 700; }
 .progress-misconceptions h3 { margin-bottom: 8px; }
 .misconception-row { display: flex; justify-content: space-between; gap: 16px; border-top: 1px solid var(--border); padding: 9px 0; }
 
+/* Guided tour */
+.tour-button { min-width: 44px; padding-inline: 12px; font-size: 1.05rem; }
+.tour-root { position: fixed; inset: 0; z-index: 50; }
+.tour-spotlight {
+  position: fixed;
+  border-radius: 12px;
+  box-shadow: 0 0 0 200vmax rgba(20, 29, 43, 0.55);
+  outline: 3px solid var(--focus);
+  outline-offset: 0;
+  pointer-events: none;
+  transition: top 280ms ease, left 280ms ease, width 280ms ease, height 280ms ease;
+}
+.tour-centered .tour-spotlight { outline: none; }
+.tour-card {
+  position: fixed;
+  width: min(380px, calc(100vw - 32px));
+  padding: 20px 22px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 24px 80px rgba(21, 31, 48, 0.3);
+}
+.tour-centered .tour-card { top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(460px, calc(100vw - 32px)); }
+.tour-reduced-motion .tour-spotlight { transition: none; }
+.tour-progress { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
+.tour-step-count { margin-bottom: 0; }
+.tour-card h2 { font-size: 1.25rem; margin-bottom: 8px; }
+.tour-body { color: var(--ink); line-height: 1.5; }
+.tour-body p { margin-bottom: 10px; }
+.tour-body math { font-size: 1.1em; }
+.tour-nowrap { white-space: nowrap; }
+.tour-body .tour-key {
+  display: inline-block;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface-muted);
+  font-weight: 700;
+  white-space: nowrap;
+}
+.tour-dots { display: flex; gap: 6px; }
+.tour-dots span { width: 7px; height: 7px; border-radius: 50%; background: var(--border); }
+.tour-dots .tour-dot-done { background: color-mix(in srgb, var(--accent) 45%, var(--border)); }
+.tour-dots .tour-dot-current { background: var(--accent); width: 18px; border-radius: 999px; }
+.tour-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 6px; }
+.tour-actions #tourSkipButton { margin-right: auto; padding-left: 0; }
+.tour-annotation { fill: var(--ink); font-size: 20px; font-weight: 800; paint-order: stroke; stroke: white; stroke-width: 5px; }
+.tour-annotation-open { fill: var(--curve); }
+
 @media (max-width: 850px) {
   .app-header { align-items: flex-start; }
   .app-shell {
@@ -403,6 +452,25 @@ label { font-weight: 700; }
 @media (max-width: 620px) {
   .app-header { padding: 16px 14px 12px; display: block; }
   .header-actions { margin-top: 13px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  /* A fourth grid column squeezed New problem onto two lines, so the tour button sits beside
+     the title instead. */
+  .app-header { position: relative; }
+  .app-header h1 { padding-right: 52px; }
+  .header-actions .tour-button { position: absolute; top: 14px; right: 14px; width: 44px; min-height: 40px; }
+  /* On a phone the card becomes a bottom sheet; the tour scrolls its target into the band
+     between the sticky question strip and the sheet. */
+  .tour-root:not(.tour-centered) .tour-card {
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    border-radius: 14px 14px 0 0;
+    padding: 16px 16px calc(14px + env(safe-area-inset-bottom));
+  }
+  .tour-card h2 { font-size: 1.1rem; }
+  .tour-body { font-size: 0.93rem; }
+  .tour-annotation { font-size: 32px; stroke-width: 7px; }
   .header-actions button { width: 100%; min-width: 0; max-width: 100%; padding: 9px 4px; font-size: 0.82rem; white-space: normal; overflow: hidden; }
   .app-shell { padding: 0 10px 24px; gap: 12px; }
   .app-header h1 { font-size: 1.45rem; }
