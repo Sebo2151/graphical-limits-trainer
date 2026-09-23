@@ -524,6 +524,15 @@ export function diagnoseSubmission(problem, submitted) {
     return { misconception: 'infinity-vs-dne', message: 'The values grow without bound in one consistent direction, so the infinity sign carries information that DNE would discard.' };
   }
   if (problem.question.type === 'composition') {
+    const { caseType, outerInput } = problem.question;
+    // outerInput is only meaningful when g has a limit; in the innerDneOuterExists case it
+    // is an unused draw, so matching it there would be a coincidence, not a swap.
+    if (caseType !== 'innerDneOuterExists' && submitted.kind === 'finite' && submitted.value.equals(outerInput)) {
+      return { misconception: 'inner-outer-swap', message: `That is where g(x) is heading: ${outerInput} is the input g sends to f. The question asks for the output, so read f near x = ${outerInput}.` };
+    }
+    if (caseType === 'direct') {
+      return { misconception: 'direct-substitution', message: `g(x) approaches ${outerInput} from both sides, and f has no break there. Read the height of f at x = ${outerInput}.` };
+    }
     if (problem.question.innerDirection === 'left' || problem.question.innerDirection === 'right') {
       return { misconception: 'composition-direction', message: `Although g(x) tends to ${problem.question.outerInput}, it approaches that input from the ${problem.question.innerDirection}. Read that one-sided behavior on f.` };
     }

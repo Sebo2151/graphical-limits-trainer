@@ -155,6 +155,7 @@ function bindEvents() {
 
   window.addEventListener('keydown', (event) => {
     if (!event.altKey || event.key?.toLowerCase() !== 'n') return;
+    if (document.querySelector('dialog[open]')) return;
     event.preventDefault();
     startProblem(randomSeed());
   });
@@ -300,7 +301,7 @@ function renderQuestion(question) {
       button.type = 'button';
       button.textContent = item.label;
       button.dataset.value = item.value;
-      button.addEventListener('click', () => submitChoice(item.value));
+      button.addEventListener('click', () => submitChoice(item.value, button));
       elements.choiceAnswerArea.append(button);
     });
   }
@@ -339,11 +340,13 @@ function questionMathML(question) {
   }
   const fAtA = `<math display="block"><mi>f</mi><mo>(</mo>${a}<mo>)</mo>${unknownTail}</math>`;
   if (question.type === 'functionValue') return fAtA;
+  // These are sentences, not formulas. A single block of MathML cannot wrap, so in the
+  // narrow desktop question column it was clipped behind a scrollbar mid-question.
   if (question.type === 'continuity') {
-    return `<math display="block"><mtext>Is</mtext><mspace width="0.35em"/><mi>f</mi><mspace width="0.35em"/><mtext>continuous at</mtext><mspace width="0.35em"/><mrow class="question-tail"><mi>x</mi><mo>=</mo>${a}<mo>?</mo></mrow></math>`;
+    return `Is <math><mi>f</mi></math> continuous at <span class="question-tail"><math><mi>x</mi><mo>=</mo>${a}</math>?</span>`;
   }
   if (question.type === 'classification') {
-    return `<math display="block"><mtext>Classify</mtext><mspace width="0.35em"/><mi>f</mi><mspace width="0.35em"/><mtext>at</mtext><mspace width="0.35em"/><mi>x</mi><mo>=</mo>${a}<mo>.</mo></math>`;
+    return `Classify <math><mi>f</mi></math> at <span class="question-tail"><math><mi>x</mi><mo>=</mo>${a}</math>.</span>`;
   }
 
   let approach = a;
@@ -383,9 +386,15 @@ function handleLimitSubmit(event) {
   evaluateSubmission(submitted);
 }
 
-function submitChoice(value) {
+function submitChoice(value, button) {
   if (solved || problem.question.inputMode !== 'choice') return;
   evaluateSubmission(choice(value));
+  // A rejected choice stays visibly ruled out, so it cannot be clicked again and logged as
+  // a second misconception.
+  if (!solved && button) {
+    button.disabled = true;
+    button.classList.add('choice-eliminated');
+  }
 }
 
 function evaluateSubmission(submitted) {
@@ -409,13 +418,15 @@ function evaluateSubmission(submitted) {
   const diagnosis = diagnoseSubmission(problem, submitted);
   recordMisconception(diagnosis.misconception);
   const message = diagnosis.message || diagnoseWrongAnswer(problem, submitted);
-  const extension = wrongAttempts >= 2 ? ' Show me can trace the reasoning step by step.' : '';
+  const extension = wrongAttempts >= 2 && !showMeUsed ? ' Show me can trace the reasoning step by step.' : '';
   showFeedback('incorrect', wrongAttempts === 1 ? 'Not quite' : 'Try tracing the approach', `${message}${extension}`);
   vibrate('incorrect');
   pulseAnswerArea('incorrect');
   revealFeedback();
 
-  if (wrongAttempts >= 2) {
+  // Once Show me has run, its animation owns the graph and the pause/replay controls.
+  // Swapping in the static hint here hid those controls while the animation kept drawing.
+  if (wrongAttempts >= 2 && !showMeUsed) {
     elements.animationControls.hidden = false;
     elements.showMeButton.hidden = false;
     elements.animationToggleButton.hidden = true;
@@ -1103,7 +1114,10 @@ function directionArrow(side) {
   group.append(svgElement('line', {
     x1: mapX(start), y1: y, x2: mapX(end), y2: y,
     class: side === 'left' ? 'animation-guide-left' : 'animation-guide-right',
-    'marker-end': 'url(#none)',
+  }));
+  group.append(svgElement('path', {
+    d: arrowheadPath(mapX(end), y, mapX(start), y),
+    class: side === 'left' ? 'animation-point-left' : 'animation-point-right',
   }));
   group.append(svgElement('text', {
     x: (mapX(start) + mapX(end)) / 2,
@@ -1492,9 +1506,11 @@ function renderFunctionValueExplanation(layer, progressValue) {
     layer.append(svgElement('circle', { cx: x, cy: y, r: 15 + 4 * Math.sin(progressValue * Math.PI), class: 'animation-target' }));
     layer.append(svgElement('line', { x1: x, y1: mapY(0), x2: x, y2: y, class: 'animation-guide-right' }));
   } else {
+    // With two infinite branches there is no open circle to point at, only an asymptote.
     const finiteBranch = [scene.left, scene.right].find((branch) => branch.limit.kind === 'finite');
     const y = finiteBranch ? mapY(finiteBranch.limit.value.toNumber()) : mapY(0);
-    layer.append(svgElement('text', { x, y: y - 20, 'text-anchor': 'middle', class: 'animation-label' }, 'open, not filled'));
+    layer.append(svgElement('text', { x, y: y - 20, 'text-anchor': 'middle', class: 'animation-label' },
+      finiteBranch ? 'open, not filled' : 'no filled point'));
   }
 }
 
@@ -1875,9 +1891,14 @@ function configFromUrl(params, fallback) {
   for (const code of q || '') if (questionCodes[code]) questionTypes[questionCodes[code]] = true;
   for (const code of g || '') if (featureCodes[code]) features[featureCodes[code]] = true;
   for (const code of f || '') if (familyCodes[code]) families[familyCodes[code]] = true;
+  // Every problem rewrites the address bar, so a plain reload arrives here too. Without the
+  // preset it came back as Custom, and Practice My Weak Areas silently stopped targeting.
+  const preset = PRESETS[params.get('p')] ? params.get('p') : 'custom';
 
   return {
     ...normalizeConfig({
+      preset,
+      practiceMode: PRESETS[preset]?.practiceMode === 'weak' ? 'weak' : 'mixed',
       difficulty: Number(params.get('d') || fallback.difficulty),
       questionTypes: q ? questionTypes : fallback.questionTypes,
       features: g ? features : fallback.features,
@@ -1906,6 +1927,8 @@ function problemUrl(seed) {
   url.searchParams.set('q', q);
   url.searchParams.set('g', g);
   url.searchParams.set('f', f);
+  if (PRESETS[appConfig.preset]) url.searchParams.set('p', appConfig.preset);
+  else url.searchParams.delete('p');
   return url;
 }
 

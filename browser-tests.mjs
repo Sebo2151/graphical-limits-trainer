@@ -370,6 +370,49 @@ try {
   assert(desktop.questionScrollWidth <= desktop.questionClientWidth,
     'The desktop MathML question must fit without a horizontal scrollbar.');
 
+  // Continuity and classification questions are sentences. As one unwrappable block of
+  // MathML they were clipped mid-question in the desktop column, and the answer card hung
+  // far below the question because the graph's height was split across both grid rows.
+  await navigate(`${base}/?seed=desktop-continuity&f=p&q=c&d=3`, 1280, 900);
+  const sentence = await evaluate(`(() => {
+    const heading = document.querySelector('#questionHeading');
+    const question = document.querySelector('.question-strip').getBoundingClientRect();
+    const answer = document.querySelector('.answer-card').getBoundingClientRect();
+    return {
+      scrollWidth: heading.scrollWidth, clientWidth: heading.clientWidth,
+      scrollHeight: heading.scrollHeight, clientHeight: heading.clientHeight,
+      gap: answer.top - question.bottom,
+    };
+  })()`);
+  assert(sentence.scrollWidth <= sentence.clientWidth && sentence.scrollHeight <= sentence.clientHeight,
+    `A continuity question must fit its column without scrolling: ${JSON.stringify(sentence)}`);
+  assert(sentence.gap < 40, `The answer card must sit directly under the question: ${JSON.stringify(sentence)}`);
+
+  // A rejected choice must not be clickable again, or it logs a second misconception.
+  const eliminated = await evaluate(`(() => {
+    const expected = ${JSON.stringify(answerText(generateProblem('desktop-continuity', {
+      families: { point: true, atInfinity: false, limitLaws: false, composition: false },
+      questionTypes: { functionValue: false, oneSided: false, twoSided: false, continuity: true, classification: false },
+      difficulty: 3,
+    }).question.answer))};
+    const wrong = [...document.querySelectorAll('#choiceAnswerArea button')].find((b) => b.dataset.value !== expected);
+    wrong.click();
+    return { disabled: wrong.disabled, marked: wrong.classList.contains('choice-eliminated') };
+  })()`);
+  assert.deepEqual(eliminated, { disabled: true, marked: true }, 'A wrong choice must be ruled out after it is picked.');
+
+  // Every problem rewrites the address bar, so a reload is read as a shared link. The preset
+  // has to survive that, or Practice My Weak Areas silently turns into Custom.
+  await evaluate(`localStorage.setItem('graphicalLimitsTrainer.config.v1', JSON.stringify({
+    preset: 'weakAreas', practiceMode: 'weak', difficulty: 1, haptics: false, reducedMotion: true
+  }))`);
+  await navigate(`${base}/?seed=preset-roundtrip`, 1280, 900);
+  const reloadUrl = await evaluate('location.href');
+  assert(/[?&]p=weakAreas/.test(reloadUrl), `The address bar must carry the preset: ${reloadUrl}`);
+  await navigate(reloadUrl, 1280, 900);
+  assert.equal(await evaluate("document.querySelector('#presetInput').value"), 'weakAreas',
+    'Reloading must keep the Practice My Weak Areas preset.');
+
   await navigate(`${base}/?seed=desktop-law-legend&f=l&d=3`, 1280, 900);
   const desktopLegend = await evaluate(`({
     fontSizes: [...document.querySelectorAll('.graph-function-label, .graph-function-label-g')]

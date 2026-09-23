@@ -547,6 +547,32 @@ function testAdvancedExplanationLanguage() {
   }
 }
 
+// Wrong-answer feedback for composition has to match the case on screen. The direct case,
+// the most common one at introductory difficulty, used to be told that "the inner limit
+// need not exist" while its inner limit plainly did.
+function testCompositionFeedback() {
+  const cases = new Set();
+  for (let difficulty = 1; difficulty <= 3; difficulty += 1) {
+    for (let i = 0; i < 400; i += 1) {
+      const problem = generateAdvancedProblem(`compfeedback-${difficulty}-${i}`, familyConfig('composition', difficulty));
+      const { caseType, outerInput, answer } = problem.question;
+      cases.add(caseType);
+      const miss = answer.kind === 'finite' && answer.value.equals(new Rational(99)) ? new Rational(98) : new Rational(99);
+      const wrong = diagnoseSubmission(problem, { kind: 'finite', value: miss });
+      if (caseType !== 'innerDneOuterExists') {
+        assert(!/need not exist/.test(wrong.message),
+          `A composition whose inner limit exists was told it need not: ${wrong.message}`);
+      }
+      if (caseType !== 'innerDneOuterExists' && !(answer.kind === 'finite' && answer.value.equals(outerInput))) {
+        const swapped = diagnoseSubmission(problem, { kind: 'finite', value: outerInput });
+        assert.equal(swapped.misconception, 'inner-outer-swap',
+          `Answering g's limit instead of f's must be named as an inner/outer swap (${caseType}).`);
+      }
+    }
+  }
+  assert(cases.has('direct'), 'Expected the direct composition case.');
+}
+
 function testInterfaceRegressions() {
   const html = readFileSync(new URL('./index.html', import.meta.url), 'utf8');
   const css = readFileSync(new URL('./styles.css', import.meta.url), 'utf8');
@@ -629,5 +655,6 @@ testTwoSidedInfinityConvention();
 testAdvancedFamilies();
 testAdvancedParserMatchesCore();
 testAdvancedExplanationLanguage();
+testCompositionFeedback();
 testInterfaceRegressions();
 console.log('All semantic generator tests passed.');

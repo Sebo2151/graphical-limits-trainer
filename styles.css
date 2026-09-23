@@ -114,6 +114,10 @@ button {
   padding: 0 24px 40px;
   display: grid;
   grid-template-columns: minmax(0, 1.45fr) minmax(330px, 0.75fr);
+  /* The graph spans both rows. With two auto rows its extra height was split between them,
+     which left the answer card floating far below the question. The flexible second row
+     absorbs that height instead. */
+  grid-template-rows: auto 1fr auto;
   grid-template-areas:
     "graph question"
     "graph answer"
@@ -162,9 +166,24 @@ button {
   font-family: "STIX Two Math", "Cambria Math", serif;
   font-size: clamp(1.35rem, 3vw, 2rem);
   overflow-x: auto;
+  /* overflow-x: auto forces the y-axis to auto too, and the limit subscript's descent
+     produced a stray vertical scrollbar beside every limit question. */
+  overflow-y: hidden;
   white-space: nowrap;
 }
 .question-math math { font-size: 1.15em; }
+.question-math.question-continuity,
+.question-math.question-classification {
+  display: block;
+  white-space: normal;
+  overflow: visible;
+  font-size: clamp(1.3rem, 2.4vw, 1.6rem);
+  font-weight: 400;
+  line-height: 1.35;
+}
+.question-math.question-continuity math,
+.question-math.question-classification math { font-size: 1em; }
+.question-tail { white-space: nowrap; }
 .question-math.question-composition,
 .question-math.question-limitLaw { font-size: 1.45rem; overflow: visible; }
 .question-math.question-composition math,
@@ -202,6 +221,12 @@ label { font-weight: 700; }
 .choice-answer-area { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .choice-answer-area.classification-choices { grid-template-columns: 1fr; }
 .choice-answer-area button { min-height: 48px; text-align: left; }
+.choice-answer-area button.choice-eliminated {
+  cursor: not-allowed;
+  color: var(--muted);
+  background: var(--surface-muted);
+  text-decoration: line-through;
+}
 
 .feedback-panel {
   margin-top: 20px;
@@ -366,6 +391,7 @@ label { font-weight: 700; }
   .app-header { align-items: flex-start; }
   .app-shell {
     grid-template-columns: 1fr;
+    grid-template-rows: none;
     grid-template-areas: "question" "graph" "answer" "debug";
   }
   .question-strip { position: sticky; top: 0; z-index: 4; box-shadow: 0 8px 20px rgba(28, 40, 61, 0.1); }
